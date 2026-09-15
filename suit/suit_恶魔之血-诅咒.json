@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "sets": [
+    {
+      "id": "set_1789016202046_dgd",
+      "name": "恶魔之血-诅咒",
+      "slots": [
+        "II-v2",
+        "III-v3",
+        "III-b",
+        "IV-stair"
+      ]
+    }
+  ]
+}

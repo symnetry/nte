@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "sets": [
+    {
+      "id": "set_1789020510401_a08",
+      "name": "迪亚波罗斯",
+      "slots": [
+        "II-v2",
+        "III-b",
+        "III-c",
+        "IV-h4"
+      ]
+    },
+    {
+      "id": "set_1789016202046_dgd",
+      "name": "恶魔之血-诅咒",
+      "slots": [
+        "II-v2",
+        "III-v3",
+        "III-b",
+        "IV-stair"
+      ]
+    },
+    {
+      "id": "set_1789015974119_dnu",
+      "name": "街头拳王",
+      "slots": [
+        "II-h2",
+        "III-h3",
+        "III-d",
+        "IV-Z"
+      ]
+    },
+    {
+      "id": "set_1789020510387_5f9",
+      "name": "森林萤火之心",
+      "slots": [
+        "II-h2",
+        "III-v3",
+        "III-a",
+        "IV-stair"
+      ]
+    },
+    {
+      "id": "set_1789016136454_zoc",
+      "name": "失落光芒",
+      "slots": [
+        "II-h2",
+        "III-a",
+        "III-d",
+        "IV-v4"
+      ]
+    },
+    {
+      "id": "set_1789020510398_a7c",
+      "name": "缇娜的夜间酒馆",
+      "slots": [
+        "II-v2",
+        "III-v3",
+        "III-a",
+        "III-b"
+      ]
+    },
+    {
+      "id": "set_1789020510396_7bf",
+      "name": "真红-双生蝶",
+      "slots": [
+        "II-v2",
+        "III-h3",
+        "III-c",
+        "IV-Z"
+      ]
+    },
+    {
+      "id": "set_1789041254540_qtg",
+      "name": "守卫王国",
+      "slots": [
+        "III-h3",
+        "III-v3",
+        "III-d",
+        "III-c"
+      ]
+    },
+    {
+      "id": "set_1789042066014_5as",
+      "name": "音速蓝刺猬",
+      "slots": [
+        "III-a",
+        "III-b",
+        "III-d",
+        "III-c"
+      ]
+    },
+    {
+      "id": "set_1789042464975_b90",
+      "name": "静谧山庄",
+      "slots": [
+        "II-h2",
+        "II-v2",
+        "IV-v4",
+        "IV-stair"
+      ]
+    },
+    {
+      "id": "set_1789042492557_zt6",
+      "name": "影之信条",
+      "slots": [
+        "II-v2",
+        "II-h2",
+        "IV-h4",
+        "IV-stair"
+      ]
+    },
+    {
+      "id": "set_1789042519047_2m5",
+      "name": "小小大冒险",
+      "slots": [
+        "II-h2",
+        "II-v2",
+        "IV-h4",
+        "IV-Z"
+      ]
+    }
+  ]
+}

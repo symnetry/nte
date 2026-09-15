@@ -1,0 +1,15 @@
+{
+    "version":  1,
+    "sets":  [
+                 {
+                     "id":  "set_1789020510387_5f9",
+                     "name":  "森林萤火之心",
+                     "slots":  [
+                                   "II-h2",
+                                   "III-v3",
+                                   "III-a",
+                                   "IV-stair"
+                               ]
+                 }
+             ]
+}

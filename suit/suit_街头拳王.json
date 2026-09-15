@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "sets": [
+    {
+      "id": "set_1789015974119_dnu",
+      "name": "街头拳王",
+      "slots": [
+        "II-h2",
+        "III-h3",
+        "III-d",
+        "IV-Z"
+      ]
+    }
+  ]
+}
