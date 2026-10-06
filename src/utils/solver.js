@@ -13,11 +13,15 @@ import { SHAPES } from '../data/shapes.js'
  *      分支数极小（没有「留空」分支——因为合格方案不允许遗漏任何一格）。
  *   ② 合格的铺法 = 所有可用格 100% 被块覆盖（零留空）且必填形状全部放下；
  *      凡漏了 1~2 格没填满的方案一律丢弃，不作为可行解返回。
- *   ③ 用「访问态记忆化」(visited) 避免重复进入完全相同的 (已处理, 已填, 必填余量,
- *      已用数量) 子状态；用「方案签名去重」(seenSig) 保证同一铺法只记一次。
+ *   ③ 用「死状态记忆化」(deadMemo) 避免重复展开已被完整探索证伪的
+ *      (已处理, 已填, 必填余量, 已用数量) 子状态；用「批签名去重」(seenBatch)
+ *      保证同一「驱动块多重集合」的铺法只记一次（与位置/顺序无关）。
  *   ④ 必填形状作为硬约束：状态里若某个必填形状在剩余空格里已无处可放，
  *      立刻回溯，保证「必填全部放下」优先于覆盖率。
- *   ⑤ 预算（状态数 / 耗时 / 方案数）耗尽仍枚举不全时，标记 truncated 并截断，
+ *   ⑤ 前向剪枝：每放一块后立即检测是否造出「孤立死洞」（最小驱动块 2 格，
+ *      无空邻格的空格必不可覆盖），是则跳过该走法、不递归——把原本要展开到
+ *      叶子的注定失败分支当场剪掉，搜索空间大幅缩小。
+ *   ⑥ 预算（状态数 / 耗时 / 方案数）耗尽仍枚举不全时，标记 truncated 并截断，
  *      保证界面不卡死（随后若精确 0 解则回退贪心并明确提示「无解」）。
  *
  * 必填 / 可选 模型：
@@ -46,11 +50,11 @@ import { SHAPES } from '../data/shapes.js'
  *   exactTruncated=true 表示是因预算耗尽而中断（非穷尽）。
  * ============================================================ */
 
-/** 枚举状态总数上限（含访问态记忆化后的去重子状态数） */
+/** 枚举状态总数上限（含死状态记忆化后的去重子状态数） */
 const MAX_STATES = 1_500_000
 /** 枚举耗时上限（毫秒），避免病态棋盘卡住界面 */
 const MAX_MS = 1500
-/** 返回方案数上限，避免组合爆炸 */
+/** 返回方案数上限（按「批」去重后的唯一方案数），避免组合爆炸 */
 const MAX_SOLUTIONS = 800
 
 const ABORT = { abort: true }
@@ -251,12 +255,25 @@ function exactSolve(rows, cols, available, required, palette = {}, { basedOnSet,
 
   /* ---------- 枚举全部合法铺法 ---------- */
   const solutions = []
-  const seenSig = new Set()   // 方案签名去重（同一铺法只记一次）
-  const visited = new Set()   // 访问态记忆化（同一子状态只展开一次）
+  const seenBatch = new Set() // 批去重：同一「驱动块多重集合」（形状×数量）只保留首个方案
+  const deadMemo = new Set()  // 死状态记忆化：完整探索后仍无任何解延伸的状态，不再重复探索
   let truncated = false
   const keyOf = (done, filled, rem, used) =>
     done.toString(36) + '|' + filled.toString(36) + '|' + rem.join(',') + '|' + used.join(',')
   const freshUsed = () => new Array(shapes.length).fill(0)
+
+  // 批签名：与位置/顺序无关，只关心每种形状用了几个（即用户说的「同一批驱动块」）
+  const batchSig = walk => {
+    const cnt = {}
+    for (const mv of walk) {
+      const id = shapes[mv.placement.si].id
+      cnt[id] = (cnt[id] || 0) + 1
+    }
+    return Object.entries(cnt)
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .map(([k, v]) => `${k}×${v}`)
+      .join(',')
+  }
 
   const record = walk => {
     const placements = []
@@ -271,12 +288,44 @@ function exactSolve(rows, cols, available, required, palette = {}, { basedOnSet,
       covered += mv.placement.size
       blocks++
     }
-    const sig = placements
-      .map(p => p.blockId + '@' + p.cells.map(c => c[0] + '.' + c[1]).join('_'))
-      .sort().join('|')
-    if (seenSig.has(sig)) return
-    seenSig.add(sig)
+    // 批去重：同一批驱动块（多重集合相同）视为重复，只保留首个
+    const sig = batchSig(walk)
+    if (seenBatch.has(sig)) return
+    seenBatch.add(sig)
     solutions.push({ placements, covered, blocks, skips: 0 })
+  }
+
+  /* ---------- 前向剪枝：放完一块后，立即检测是否造出「永远填不上」的死洞 ----------
+   * 合格方案要求精准占满，而本工具最小驱动块是 2 格。因此：一个可用空格若
+   * 没有任何「可用且仍为空」的 4 邻格，则它不可能被任何块覆盖（块至少要占
+   * 它自己 + 1 个邻格），该分支必定失败。在递归进入前就剪掉，避免把注定
+   * 失败的路径一路展开到叶子才被丢弃（这正是之前「剪枝偏晚、搜索膨胀」的根因）。
+   * 只检查本次新覆盖格的相邻空格即可：一个新出现的孤立洞，其最后一格空邻格
+   * 必在本次被覆盖，故必与本次新覆盖格相邻——归纳可证该检查是「可靠」的
+   * （不会误删任何真实解）。 */
+  const DIRS4 = [[-1, 0], [1, 0], [0, -1], [0, 1]]
+  const emptyNb = (k, filled) => {
+    const r = Math.floor(k / cols), c = k % cols
+    let n = 0
+    for (const [dr, dc] of DIRS4) {
+      const rr = r + dr, cc = c + dc
+      if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) continue
+      const kk = rr * cols + cc
+      if (availArr[kk] && (filled & (1n << BigInt(kk))) === 0n) n++
+    }
+    return n
+  }
+  const isDeadAfterPlace = (filled, cells) => {
+    for (const k of cells) {
+      const r = Math.floor(k / cols), c = k % cols
+      for (const [dr, dc] of DIRS4) {
+        const rr = r + dr, cc = c + dc
+        if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) continue
+        const kk = rr * cols + cc
+        if (availArr[kk] && (filled & (1n << BigInt(kk))) === 0n && emptyNb(kk, filled) === 0) return true
+      }
+    }
+    return false
   }
 
   const walk = []
@@ -285,15 +334,14 @@ function exactSolve(rows, cols, available, required, palette = {}, { basedOnSet,
     if (budget.used > budget.max || Date.now() - budget.t0 > MAX_MS) { truncated = true; return }
     budget.used++
     const key = keyOf(done, filled, rem, used)
-    if (visited.has(key)) return
-    visited.add(key)
+    if (deadMemo.has(key)) return
     const i = lowestFree(done)
     if (i === -1) {
       // 叶子：所有可用格已处理。合格方案须【精准占满】且【必填全放下】
       if (rem.every(v => v <= 0) && filled === availMask) record(walk)
       return
     }
-    // 必填硬约束：剩余必填在剩余空格已无处可放 → 剪枝
+    // 必填硬约束：剩余必填在剩余空格已无处可放 → 该状态已死，记忆化
     let ok = true
     for (let s = 0; s < rem.length && ok; s++) {
       if (rem[s] <= 0) continue
@@ -303,13 +351,21 @@ function exactSolve(rows, cols, available, required, palette = {}, { basedOnSet,
       }
       if (!any) ok = false
     }
-    if (!ok) return
+    if (!ok) { deadMemo.add(key); return }
+    let foundAny = false
     for (const mv of movesAt(i, done, filled, rem, used)) {
       if (solutions.length >= MAX_SOLUTIONS) { truncated = true; return }
+      // 前向剪枝：本次放置若造出孤立死洞，直接跳过该走法（不递归、不记父状态为死）
+      if (isDeadAfterPlace(mv.childFilled, mv.placement.cells)) continue
       walk.push(mv)
+      const before = solutions.length
       enumRec(mv.childDone, mv.childFilled, mv.childRem, mv.childUsed)
+      if (solutions.length > before) foundAny = true
       walk.pop()
+      if (truncated) return
     }
+    // 完整探索（未触发预算上限）且未产出任何方案 → 记为死状态，供后续剪枝
+    if (!truncated && !foundAny) deadMemo.add(key)
   }
   enumRec(0n, 0n, reqCounts.slice(), freshUsed())
 
