@@ -60,6 +60,17 @@ button.small { padding: 3px 7px; font-size: 11px; }
 canvas { background: #14171e; border-radius: 8px; cursor: crosshair; }
 #status { font-size: 12px; color: #8b95a8; min-height: 18px; }
 
+/* 方案分页条 */
+.board-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.solution-bar { display: flex; align-items: center; gap: 10px; }
+.solution-bar button {
+  background: #2a3140; color: #cdd5e3; border: 1px solid #353d4d;
+  border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+}
+.solution-bar button:hover:not(:disabled) { background: #333c4e; }
+.solution-bar button:disabled { opacity: .4; cursor: not-allowed; }
+.solution-bar .solution-idx { font-size: 12px; color: #8b95a8; min-width: 96px; text-align: center; }
+
 /* ---------- 驱动块词条悬浮窗（画布右侧，可展开/收起） ---------- */
 .substat-float {
   position: absolute; top: 16px; z-index: 50; width: 300px;
@@ -208,9 +219,10 @@ canvas { background: #14171e; border-radius: 8px; cursor: crosshair; }
   cursor: pointer; transition: .15s; position: relative;
 }
 .req-item.active { border-color: #4a7dff; background: #1a2338; }
+.req-item.mandatory { border-color: #e8a33d; background: #221a0e; }
 .req-item .preview { display: grid; gap: 1px; }
 .req-item .preview div { width: 9px; height: 9px; border-radius: 1px; }
-.req-item .preview div.on { background: #4a7dff; }
+.req-item .preview div.on { background: #e8a33d; }
 .req-item .preview div.off { background: transparent; }
 .req-item .badge {
   position: absolute; top: 2px; right: 4px;

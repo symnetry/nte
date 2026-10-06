@@ -32,9 +32,15 @@ export function NteProvider({ children }) {
   const [available, setAvailable] = useState(() => makeGrid(5, 5))
   const [placements, setPlacements] = useState([])
   const [required, setRequired] = useState({})
+  const [palette, setPalette] = useState({}) // 可选形状池（库存上限）：{ 形状id: 数量 }
   const [selectedSetId, setSelectedSetId] = useState('')
   const [basedOnSet, setBasedOnSet] = useState(true)
   const [fillRemaining, setFillRemaining] = useState(true)
+  const [usePalette, setUsePalette] = useState(false) // 新逻辑开关：是否限定可选形状池（默认关=旧逻辑）
+  const [vanity, setVanity] = useState(false) // 虚荣模式：限定可选形状池的分支，套装块变非必选、全部所选形状均为可选池
+  const [solutions, setSolutions] = useState([])        // 枚举得到的所有合法铺法
+  const [solutionIndex, setSolutionIndex] = useState(0)  // 当前展示的方案序号
+  const [solutionTruncated, setSolutionTruncated] = useState(false) // 方案是否因预算/上限被截断
   const [charName, setCharName] = useState('')
   const [containerSelectedId, setContainerSelectedId] = useState('')
   const [status, setStatus] = useState({ msg: '就绪', isError: false })
@@ -55,6 +61,11 @@ export function NteProvider({ children }) {
   const availableRef = useRef(available)
   const placementsRef = useRef(placements)
   const requiredRef = useRef(required)
+  const paletteRef = useRef(palette)
+  const usePaletteRef = useRef(usePalette)
+  const vanityRef = useRef(vanity)
+  const solutionsRef = useRef(solutions)
+  const solutionIndexRef = useRef(solutionIndex)
   const selectedSetIdRef = useRef(selectedSetId)
   const containerSelectedIdRef = useRef(containerSelectedId)
   const charNameRef = useRef(charName)
@@ -66,6 +77,11 @@ export function NteProvider({ children }) {
   useEffect(() => { availableRef.current = available }, [available])
   useEffect(() => { placementsRef.current = placements }, [placements])
   useEffect(() => { requiredRef.current = required }, [required])
+  useEffect(() => { paletteRef.current = palette }, [palette])
+  useEffect(() => { usePaletteRef.current = usePalette }, [usePalette])
+  useEffect(() => { vanityRef.current = vanity }, [vanity])
+  useEffect(() => { solutionsRef.current = solutions }, [solutions])
+  useEffect(() => { solutionIndexRef.current = solutionIndex }, [solutionIndex])
   useEffect(() => { selectedSetIdRef.current = selectedSetId }, [selectedSetId])
   useEffect(() => { containerSelectedIdRef.current = containerSelectedId }, [containerSelectedId])
   useEffect(() => { charNameRef.current = charName }, [charName])
@@ -120,15 +136,47 @@ export function NteProvider({ children }) {
     notify('已清空放置')
   }
 
-  /* ---------- 求解 ---------- */
+  /* ---------- 求解（枚举全部合法铺法，展示第 1 个） ---------- */
   const runSolve = () => {
-    const res = solve(rowsRef.current, colsRef.current, availableRef.current, requiredRef.current, { basedOnSet, fillRemaining })
-    setPlacements(res.placements)
-    const parts = [`分配完成（${res.optimal === false ? '快速近似' : '已求最优'}）：放置 ${res.placements.length} 个块，覆盖 ${res.covered}/${res.totalAvail} 格`]
+    const res = solve(rowsRef.current, colsRef.current, availableRef.current, requiredRef.current, paletteRef.current, { basedOnSet, fillRemaining, usePalette, vanity })
+    const list = res.solutions || []
+    setSolutions(list)
+    setSolutionTruncated(!!res.truncated)
+    setSolutionIndex(0)
+    const first = list[0] || { placements: [] }
+    setPlacements(first.placements || [])
+    const parts = []
+    if (list.length > 1) {
+      // 所有方案都是「精准占满」的合格解
+      parts.push(`共 ${list.length} 个完全铺满方案${res.truncated ? '（已截断）' : ''}${vanity ? '（虚荣模式）' : ''}，当前第 1 个；用「上一方案/下一方案」翻看`)
+    } else if (list.length === 1) {
+      parts.push(`分配完成（${res.mode === 'greedy' ? '贪心近似' : '精确枚举'}${vanity ? '·虚荣模式' : ''}）：放置 ${first.blocks} 个块，铺满 ${first.covered}/${res.totalAvail} 格`)
+    } else {
+      parts.push(vanity
+        ? '未找到可完全铺满的方案（所选可选池无法精准填满所有空格）'
+        : '未找到可完全铺满的方案（存在无法填补的空格）')
+    }
     if (res.missed.length) parts.push(`无法放置必填：${res.missed.map(s => s.name).join('、')}`)
-    if (res.optimal === false) parts.push('组合数过多，已回退到贪心算法')
-    notify(parts.join('；'), res.missed.length > 0)
+    if (res.mode === 'greedy') {
+      parts.push(res.exactTruncated
+        ? '组合数过多、搜索超时，已回退贪心近似（可能仍有空格未填满）'
+        : '已回退到贪心近似（存在空格未填满，非完全铺满）')
+    }
+    notify(parts.join('；'), res.missed.length > 0 || res.mode === 'greedy')
     return res
+  }
+
+  /* ---------- 方案分页：切换到第 i 个方案（保存当前方案的副词条编辑） ---------- */
+  const gotoSolution = i => {
+    const arr = solutionsRef.current
+    if (!arr.length) return
+    const idx = Math.max(0, Math.min(arr.length - 1, i))
+    if (idx === solutionIndexRef.current) return
+    const next = arr.slice()
+    next[solutionIndexRef.current] = { ...next[solutionIndexRef.current], placements: placementsRef.current }
+    setSolutions(next)
+    setSolutionIndex(idx)
+    setPlacements(next[idx].placements || [])
   }
 
   /* ---------- 套装 ---------- */
@@ -263,24 +311,22 @@ export function NteProvider({ children }) {
       r[sid] = (r[sid] || 0) + 1
     }
     setRequired(r)
+    setPalette({ ...r }) // 可选池默认自动包含套装形状
   }
 
-  const incRequired = id => {
-    setRequired(prev => {
-      if (prev[id]) {
-        const v = prev[id] + 1
-        if (v > 4) {
-          const { [id]: _drop, ...rest } = prev
-          return rest
-        }
-        return { ...prev, [id]: v }
+  const incPalette = id => {
+    setPalette(prev => {
+      const v = prev[id] ? prev[id] + 1 : 1
+      if (v > 4) {
+        const { [id]: _drop, ...rest } = prev
+        return rest
       }
-      return { ...prev, [id]: 1 }
+      return { ...prev, [id]: v }
     })
   }
 
-  const clearRequired = id => {
-    setRequired(prev => {
+  const clearPalette = id => {
+    setPalette(prev => {
       const { [id]: _drop, ...rest } = prev
       return rest
     })
@@ -307,12 +353,17 @@ export function NteProvider({ children }) {
       cells: p.cells,
       ...(Array.isArray(p.substats) ? { substats: p.substats } : {}),
     })))
+    setSolutions([])          // 导入配置后清空方案分页（以导入的放置为准）
+    setSolutionIndex(0)
     setRequired(config.conditions?.required || {})
+    setPalette(config.conditions?.palette || config.conditions?.required || {}) // 旧配置无 palette 时向后兼容
     setSelectedSetId(config.preset || '')
     if (config.name) setCharName(config.name)
     if (config.conditions) {
       setBasedOnSet(!!config.conditions.basedOnSet)
       setFillRemaining(!!config.conditions.fillRemaining)
+      setUsePalette(!!config.conditions.usePalette)
+      setVanity(!!config.conditions.vanity)
     }
   }
 
@@ -344,7 +395,7 @@ export function NteProvider({ children }) {
         available: availableRef.current.map(r => r.map(v => (v ? 1 : 0))),
       },
       preset: selectedSetIdRef.current || null,
-      conditions: { basedOnSet, fillRemaining, required: requiredRef.current },
+      conditions: { basedOnSet, fillRemaining, usePalette, vanity, required: requiredRef.current, palette: paletteRef.current },
       solution: placementsRef.current.map(p => ({ shapeId: p.blockId, cells: p.cells, substats: p.substats })),
     }, null, 2)
   }
@@ -467,12 +518,14 @@ export function NteProvider({ children }) {
     hiddenSetIds, toggleSetHidden,
     rows, cols, available, placements, setPlacements, required, status, notify,
     selectedSetId, setSelectedSetId, basedOnSet, setBasedOnSet, fillRemaining, setFillRemaining,
+    usePalette, setUsePalette, vanity, setVanity,
     charName, setCharName, containerSelectedId, setContainerSelectedId,
     setGrid, toggleCell, resetBoard, clearPlacements, runSolve, loadConfig,
+    solutions, solutionIndex, solutionTruncated, gotoSolution,
     armedShapeId, setArmedShapeId, libDragRef,
     addSet, updateSet, deleteSet, importSets, importRemoteSets,
     saveCurrentContainer, applyContainer, renameContainer, deleteContainer, importContainers, importRemoteContainers,
-    applySetToRequired, incRequired, clearRequired, updatePlacementSubstats, applySubstatsToAll,
+    applySetToRequired, palette, setPalette, incPalette, clearPalette, updatePlacementSubstats, applySubstatsToAll,
     modal, jsonText, setJsonText, openModal, closeModal, applyModal, downloadModal, handleRemoteLoad,
     dialog, closeDialog, confirmAsync,
     getSelectedContainer, buildImportMsg,

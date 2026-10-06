@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react'
 import { useNte } from '../../state/useNteState.jsx'
-import { SHAPE_MAP } from '../../data/shapes.js'
+import { SHAPE_MAP, ROLE_COLOR } from '../../data/shapes.js'
 import {
   SUBSTAT_POOL, SUBSTAT_SLOTS, BLOCK_TYPE_ORDER, TYPE_LABELS,
   substatLabel, mainStatsFor, normalizeSubstats,
@@ -315,7 +315,7 @@ export default function SubstatPanel() {
           return (
             <div className="substat-block" key={`${i}-${p.blockId}`}>
               <div className="blk-head">
-                <span className="blk-dot" style={{ background: shp.color }} />
+                <span className="blk-dot" style={{ background: p.mandatory ? ROLE_COLOR.mandatory : ROLE_COLOR.optional }} />
                 <span className="blk-name">{shp.name}</span>
                 <span className="blk-pos">@({anchor[0] + 1},{anchor[1] + 1})</span>
                 <span className="blk-main">攻+{main.mainAtk} 命+{main.mainHp}</span>

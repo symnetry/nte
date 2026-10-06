@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef } from 'react'
 import { useNte } from '../state/useNteState.jsx'
-import { SHAPE_MAP, lighten, darken } from '../data/shapes.js'
+import { SHAPE_MAP, lighten, darken, ROLE_COLOR } from '../data/shapes.js'
 
 const CELL = 48
 
 export default function Board() {
-  const { rows, cols, available, placements, setPlacements, toggleCell, notify, armedShapeId, setArmedShapeId, libDragRef } = useNte()
+  const { rows, cols, available, placements, setPlacements, toggleCell, notify, armedShapeId, setArmedShapeId, libDragRef,
+    solutions, solutionIndex, solutionTruncated, gotoSolution } = useNte()
   const canvasRef = useRef(null)
   const stateRef = useRef({ rows, cols, available, placements, armedShapeId })
   const draggingRef = useRef(null)
@@ -15,10 +16,11 @@ export default function Board() {
   const hoverRef = useRef(null)
 
   /* ---------- 绘制 ---------- */
-  const drawBlock = useCallback((ctx, shp, cells, isPreview, valid = true) => {
+  const drawBlock = useCallback((ctx, shp, cells, isPreview, valid = true, baseColorOverride = null) => {
     const cellSet = new Set(cells.map(([r, c]) => r + ',' + c))
     const has = (r, c) => cellSet.has(r + ',' + c)
-    const baseColor = isPreview ? (valid ? shp.color : '#ff4a4a') : shp.color
+    // 已放置块按角色着色：黄=套装必填，紫=可选填充；预览仍用形状本身颜色
+    const baseColor = isPreview ? (valid ? (baseColorOverride || shp.color) : '#ff4a4a') : (baseColorOverride || shp.color)
     const alpha = isPreview ? 0.5 : 1
 
     ctx.save()
@@ -129,7 +131,8 @@ export default function Board() {
     for (const p of placements) {
       const shp = SHAPE_MAP[p.blockId]
       if (!shp) continue
-      drawBlock(ctx, shp, p.cells, false)
+      const color = p.mandatory ? ROLE_COLOR.mandatory : ROLE_COLOR.optional
+      drawBlock(ctx, shp, p.cells, false, true, color)
     }
 
     const drag = draggingRef.current
@@ -369,5 +372,18 @@ export default function Board() {
     }
   }, [draw, toggleCell, notify, setPlacements, findPlacementAt, canPlaceAt, setArmedShapeId, libDragRef])
 
-  return <canvas id="board" ref={canvasRef} />
+  return (
+    <div className="board-wrap">
+      {solutions.length > 1 && (
+        <div className="solution-bar">
+          <button onClick={() => gotoSolution(solutionIndex - 1)} disabled={solutionIndex === 0}>‹ 上一方案</button>
+          <span className="solution-idx">
+            {solutionIndex + 1} / {solutions.length}{solutionTruncated ? '（已截断）' : ''}
+          </span>
+          <button onClick={() => gotoSolution(solutionIndex + 1)} disabled={solutionIndex >= solutions.length - 1}>下一方案 ›</button>
+        </div>
+      )}
+      <canvas id="board" ref={canvasRef} />
+    </div>
+  )
 }
