@@ -14,7 +14,7 @@ import {
   downloadText,
   buildImportMsg,
 } from '../utils/jsonIO.js'
-import { solve } from '../utils/solver.js'
+import { solve, sortSolutionsByPriority } from '../utils/solver.js'
 
 // 转发导出，兼容组件现有 import 路径
 export { useNte } from './context.js'
@@ -41,6 +41,7 @@ export function NteProvider({ children }) {
   const [solutions, setSolutions] = useState([])        // 枚举得到的所有合法铺法
   const [solutionIndex, setSolutionIndex] = useState(0)  // 当前展示的方案序号
   const [solutionTruncated, setSolutionTruncated] = useState(false) // 方案是否因预算/上限被截断
+  const [priorityType, setPriorityTypeState] = useState('') // 方案排序优先级（''=默认少块优先 / II / III / IV）
   const [charName, setCharName] = useState('')
   const [containerSelectedId, setContainerSelectedId] = useState('')
   const [status, setStatus] = useState({ msg: '就绪', isError: false })
@@ -66,6 +67,7 @@ export function NteProvider({ children }) {
   const vanityRef = useRef(vanity)
   const solutionsRef = useRef(solutions)
   const solutionIndexRef = useRef(solutionIndex)
+  const priorityTypeRef = useRef(priorityType)
   const selectedSetIdRef = useRef(selectedSetId)
   const containerSelectedIdRef = useRef(containerSelectedId)
   const charNameRef = useRef(charName)
@@ -82,6 +84,7 @@ export function NteProvider({ children }) {
   useEffect(() => { vanityRef.current = vanity }, [vanity])
   useEffect(() => { solutionsRef.current = solutions }, [solutions])
   useEffect(() => { solutionIndexRef.current = solutionIndex }, [solutionIndex])
+  useEffect(() => { priorityTypeRef.current = priorityType }, [priorityType])
   useEffect(() => { selectedSetIdRef.current = selectedSetId }, [selectedSetId])
   useEffect(() => { containerSelectedIdRef.current = containerSelectedId }, [containerSelectedId])
   useEffect(() => { charNameRef.current = charName }, [charName])
@@ -139,7 +142,7 @@ export function NteProvider({ children }) {
   /* ---------- 求解（枚举全部合法铺法，展示第 1 个） ---------- */
   const runSolve = () => {
     const res = solve(rowsRef.current, colsRef.current, availableRef.current, requiredRef.current, paletteRef.current, { basedOnSet, fillRemaining, usePalette, vanity })
-    const list = res.solutions || []
+    const list = sortSolutionsByPriority(res.solutions || [], priorityTypeRef.current)
     setSolutions(list)
     setSolutionTruncated(!!res.truncated)
     setSolutionIndex(0)
@@ -177,6 +180,18 @@ export function NteProvider({ children }) {
     setSolutions(next)
     setSolutionIndex(idx)
     setPlacements(next[idx].placements || [])
+  }
+
+  /* ---------- 方案排序优先级：仅重排已有方案（不重新求解） ---------- */
+  const setPriorityType = v => {
+    setPriorityTypeState(v)
+    const arr = solutionsRef.current
+    if (!arr.length) return
+    // 毫秒级重排：保留已编辑的副词条，回到第 1 个方案
+    const next = sortSolutionsByPriority(arr, v)
+    setSolutions(next)
+    setSolutionIndex(0)
+    setPlacements(next[0]?.placements || [])
   }
 
   /* ---------- 套装 ---------- */
@@ -364,6 +379,7 @@ export function NteProvider({ children }) {
       setFillRemaining(!!config.conditions.fillRemaining)
       setUsePalette(!!config.conditions.usePalette)
       setVanity(!!config.conditions.vanity)
+      setPriorityTypeState(config.conditions.priorityType || '')
     }
   }
 
@@ -395,7 +411,7 @@ export function NteProvider({ children }) {
         available: availableRef.current.map(r => r.map(v => (v ? 1 : 0))),
       },
       preset: selectedSetIdRef.current || null,
-      conditions: { basedOnSet, fillRemaining, usePalette, vanity, required: requiredRef.current, palette: paletteRef.current },
+      conditions: { basedOnSet, fillRemaining, usePalette, vanity, priorityType: priorityTypeRef.current, required: requiredRef.current, palette: paletteRef.current },
       solution: placementsRef.current.map(p => ({ shapeId: p.blockId, cells: p.cells, substats: p.substats })),
     }, null, 2)
   }
@@ -519,6 +535,7 @@ export function NteProvider({ children }) {
     rows, cols, available, placements, setPlacements, required, status, notify,
     selectedSetId, setSelectedSetId, basedOnSet, setBasedOnSet, fillRemaining, setFillRemaining,
     usePalette, setUsePalette, vanity, setVanity,
+    priorityType, setPriorityType,
     charName, setCharName, containerSelectedId, setContainerSelectedId,
     setGrid, toggleCell, resetBoard, clearPlacements, runSolve, loadConfig,
     solutions, solutionIndex, solutionTruncated, gotoSolution,

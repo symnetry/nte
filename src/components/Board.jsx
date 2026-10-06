@@ -6,7 +6,7 @@ const CELL = 48
 
 export default function Board() {
   const { rows, cols, available, placements, setPlacements, toggleCell, notify, armedShapeId, setArmedShapeId, libDragRef,
-    solutions, solutionIndex, solutionTruncated, gotoSolution } = useNte()
+    solutions, solutionIndex, solutionTruncated, gotoSolution, priorityType } = useNte()
   const canvasRef = useRef(null)
   const stateRef = useRef({ rows, cols, available, placements, armedShapeId })
   const draggingRef = useRef(null)
@@ -379,6 +379,7 @@ export default function Board() {
           <button onClick={() => gotoSolution(solutionIndex - 1)} disabled={solutionIndex === 0}>‹ 上一方案</button>
           <span className="solution-idx">
             {solutionIndex + 1} / {solutions.length}{solutionTruncated ? '（已截断）' : ''}
+            {priorityType && <span className="priority-tag"> · {priorityType === 'II' ? 'Ⅱ型优先' : priorityType === 'III' ? 'Ⅲ型优先' : 'Ⅳ型优先'}</span>}
           </span>
           <button onClick={() => gotoSolution(solutionIndex + 1)} disabled={solutionIndex >= solutions.length - 1}>下一方案 ›</button>
         </div>

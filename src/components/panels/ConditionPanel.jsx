@@ -8,6 +8,7 @@ export default function ConditionPanel() {
     userSets, hiddenSetIds, required, selectedSetId, basedOnSet, setBasedOnSet,
     fillRemaining, setFillRemaining, usePalette, setUsePalette, vanity, setVanity,
     applySetToRequired, palette, incPalette, clearPalette,
+    priorityType, setPriorityType,
   } = useNte()
 
   // 已隐藏的套装不出现在下拉框里
@@ -90,6 +91,19 @@ export default function ConditionPanel() {
             ? '虚荣模式已开启：套装形状仅作为可选池（非必填），连同你手动选择的形状一起精准占满棋盘。'
             : '左键循环设置数量（1→2→3→4→清除），右键直接清除。套装形状已自动预填。'}
       </div>
+
+      <div className="sub-title" style={{ marginTop: 10 }}>方案排序优先级</div>
+      <div className="hint">异环设定：角色对驱动块类型偏好不同，排序让「更符合偏好的方案」排最前。</div>
+      <select
+        value={priorityType}
+        onChange={e => setPriorityType(e.target.value)}
+        style={{ width: '100%', marginTop: 6 }}
+      >
+        <option value="">默认（少块优先）</option>
+        <option value="II">Ⅱ型驱动优先（2 格块最多）</option>
+        <option value="III">Ⅲ型驱动优先（3 格块最多）</option>
+        <option value="IV">Ⅳ型驱动优先（4 格块最多）</option>
+      </select>
 
       <div className="divider" />
       <div className="checkbox-row">

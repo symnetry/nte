@@ -1,4 +1,4 @@
-import { SHAPES } from '../data/shapes.js'
+import { SHAPES, SHAPE_MAP } from '../data/shapes.js'
 
 /* ============================================================
  * 驱动块放置求解器（枚举版）
@@ -76,6 +76,32 @@ export function solve(rows, cols, available, required, palette = {}, options = {
     exactFailed: true,
     exactTruncated: !!(exact && exact.truncated),
   }
+}
+
+/* ===================== 方案展示排序（按角色驱动块类型偏好） =====================
+ * 异环设定：每个角色对驱动块的类型偏好不同（如角色A偏好Ⅱ型）。
+ * 该函数是「展示层排序」——不重新求解，仅对已有 solutions 重排：
+ *   · priorityType 为空 → 默认按「块数升序」（大块用得多）排，等同原行为；
+ *   · priorityType = 'II'|'III'|'IV' → 按方案内该类型块数量【降序】，
+ *     命中越多越靠前；同分时按「块数升序（大块多）」兜底。
+ * 返回新数组，不改动入参。
+ */
+export function sortSolutionsByPriority(solutions, priorityType) {
+  if (!solutions || !solutions.length) return solutions
+  if (!priorityType) {
+    return solutions.slice().sort((a, b) => a.blocks - b.blocks)
+  }
+  const score = s => {
+    let n = 0
+    for (const p of s.placements) {
+      const shp = SHAPE_MAP[p.blockId]
+      if (shp && shp.type === priorityType) n++
+    }
+    return n
+  }
+  return solutions
+    .slice()
+    .sort((a, b) => (score(b) - score(a)) || (a.blocks - b.blocks))
 }
 
 /* ===================== 精确求解（枚举全部合法铺法） ===================== */

@@ -70,6 +70,7 @@ canvas { background: #14171e; border-radius: 8px; cursor: crosshair; }
 .solution-bar button:hover:not(:disabled) { background: #333c4e; }
 .solution-bar button:disabled { opacity: .4; cursor: not-allowed; }
 .solution-bar .solution-idx { font-size: 12px; color: #8b95a8; min-width: 96px; text-align: center; }
+.solution-bar .priority-tag { color: #e8a33d; }
 
 /* ---------- 驱动块词条悬浮窗（画布右侧，可展开/收起） ---------- */
 .substat-float {
