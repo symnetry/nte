@@ -145,7 +145,7 @@ nte/
 - **批去重**：同一「驱动块多重集合」（与位置/顺序无关、非旋转翻转）的铺法只保留一个。
 - **贪心兜底**：穷举无完全铺满方案时回退贪心近似并明确提示。
 
-完整设计说明见 [`docs/solver.md`](./docs/solver.md)。
+完整设计说明见 [`docs/solver.md`](./docs/solver.md)。动态算法流程可视化见 [`docs/solver-visualization.html`](./docs/solver-visualization.html)（双击即可打开，无需构建）。
 
 ---
 

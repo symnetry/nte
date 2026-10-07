@@ -226,12 +226,12 @@ export function sortSolutionsByPriority(solutions, priorityType) {
 
 | 容器 | 可用格 | 该容器最大枚举数 | 对应套装 |
 |---|---|---|---|
-| **Lacrimosa** | 25 | **790** | 缇娜的夜间酒馆 |
+| **Lacrimosa** | 20 | **112** | 缇娜的夜间酒馆 |
 | Fadia | 20 | 65 | 缇娜的夜间酒馆 |
 | sakiri | 20 | 64 | 缇娜的夜间酒馆 |
 | Zankou | 20 | 36 | 迪亚波罗斯 |
 
-- 全局峰值 **790**（`MAX_SOLUTIONS=800` 当前仅余 10 余量）。如需更大容器/新套装，建议提高 `MAX_SOLUTIONS` 留余量（当前按需求保持 800）。
+- 全局峰值 **112**（Lacrimosa 5×4 满矩形，`MAX_SOLUTIONS=800` 余量充足）。如需更大容器/新套装，建议提高 `MAX_SOLUTIONS` 留余量（当前按需求保持 800）。
 - `usePalette=true` 路径非瓶颈：仅用套装 4 形状材料总面积填不满，几乎恒为 0 精确解（走贪心回退）。
 - 前向剪枝让搜索空间大幅缩小：以 Fadia 为例，状态数从 7004（仅 deadMemo）降到 4036（+孤立洞剪枝），方案数/互异性完全一致。
 
@@ -240,3 +240,17 @@ export function sortSolutionsByPriority(solutions, priorityType) {
 ## 九、一句话业务总结
 
 **选套装 → 解析成必填+可选池 → 在锚点约束下做带三层剪枝的 DFS 精确覆盖枚举 → 同批去重 → 全占满方案翻页给用户挑；铺不满就贪心兜底并提示；按角色类型偏好排优先级**。
+
+---
+
+## 十、动态可视化
+
+[`docs/solver-visualization.html`](./docs/solver-visualization.html) 是自包含的可视化页面（双击即可在浏览器打开，无需构建、无跨域依赖）。它把本求解器逐行复刻为「事件录制版 DFS」：把每一步 `enter / place / prune-dead / prune-mand / backtrack / memo / solution` 连同棋盘快照录成事件流，再动态回放。可直观看到：
+
+- 锚点如何在「行优先最靠前空格」上逐个枚举候选放置；
+- 放置块后如何即时触发**前向剪枝**（孤立死洞标红 ✕）；
+- 必填注定放不下时整条分支被砍（闸②高亮）；
+- 回溯与死状态记忆化如何避免重复展开；
+- 底部合格方案画廊支持按 Ⅱ/Ⅲ/Ⅳ 型排序，点缩略图大图查看。
+
+内置场景：**演示·4×4 双格骨牌铺满**（最易从头看到尾，批去重后 5 个唯一方案）、以及 4 个角色容器（Fadia/sakiri/Zankou 为 5×5 带洞、Lacrimosa 为 5×4 满矩形，可叠加必填套装触发闸②）。

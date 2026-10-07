@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>求解器可视化 · solver.js 算法动态分析</title>
+<style>
+  :root {
+    --bg: #0e1117; --panel: #161b24; --panel2: #1e242f; --line: #2a313d;
+    --txt: #cdd5e3; --dim: #8b95a8; --accent: #e8a33d;
+    --II: #5bb56b; --III: #4a8fd6; --IV: #e8a33d;
+    --mand: #e8a33d; --opt: #b06bd6; --dead: #ff5a5a; --anchor: #ffd24a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--txt);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  header { padding: 16px 20px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0 0 6px; font-size: 19px; }
+  header p { margin: 0; color: var(--dim); font-size: 13px; }
+  .gates { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .gate {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 10px; font-size: 12px; color: var(--dim); transition: all .15s;
+  }
+  .gate b { color: var(--txt); }
+  .gate.active { border-color: var(--accent); color: #fff; box-shadow: 0 0 0 1px var(--accent); }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .controls label { font-size: 12px; color: var(--dim); margin-right: 4px; }
+  select, button { background: var(--panel2); color: var(--txt); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #283041; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: #1a1206; border-color: var(--accent); font-weight: 600; }
+  input[type=range] { vertical-align: middle; }
+  .main { display: flex; gap: 16px; padding: 16px 20px; align-items: flex-start; flex-wrap: wrap; }
+  .left { flex: 0 0 auto; }
+  .right { flex: 1 1 360px; min-width: 320px; display: flex; flex-direction: column; gap: 14px; }
+  canvas { background: #0b0d11; border: 1px solid var(--line); border-radius: 8px; display: block; }
+  .action { margin-top: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-height: 44px; font-size: 13px; }
+  .action .tag { display: inline-block; padding: 1px 7px; border-radius: 5px; font-size: 11px; margin-right: 6px; font-weight: 600; }
+  .tag.enter { background: #2b3a52; color: #9fc1f0; }
+  .tag.place { background: #1f4030; color: #8fe0b0; }
+  .tag.prune { background: #4a1f1f; color: #ff9a9a; }
+  .tag.back { background: #3a3320; color: #e8c87a; }
+  .tag.sol { background: var(--accent); color: #1a1206; }
+  .tag.memo { background: #3a2440; color: #d7a6e8; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .card h3 { margin: 0 0 10px; font-size: 14px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; font-size: 12px; }
+  .stats .k { color: var(--dim); }
+  .stats .v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .cands { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .cand { font-size: 11px; padding: 3px 7px; border-radius: 5px; border: 1px solid var(--line); background: var(--panel2); cursor: default; }
+  .cand.tried { border-color: var(--II); }
+  .cand.pruned { border-color: var(--dead); color: #ff9a9a; text-decoration: line-through; }
+  .log { height: 150px; overflow-y: auto; font-size: 11px; color: var(--dim); background: #0b0d11; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-family: ui-monospace, Menlo, monospace; }
+  .log div { margin: 0 0 2px; }
+  .solbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .gallery { display: flex; flex-wrap: wrap; gap: 8px; max-height: 280px; overflow-y: auto; margin-top: 8px; }
+  .sol-thumb { border: 1px solid var(--line); border-radius: 6px; padding: 4px; background: #0b0d11; cursor: pointer; }
+  .sol-thumb:hover { border-color: var(--accent); }
+  .sol-thumb canvas { background: #0b0d11; border: none; display: block; }
+  .sol-thumb .cap { font-size: 10px; color: var(--dim); text-align: center; margin-top: 2px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--dim); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .hint { color: var(--dim); font-size: 12px; }
+  code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>求解器可视化 · solver.js 算法动态分析</h1>
+  <p>从「容器 → 驱动块」一步步看清楚：驱动块如何在<strong>锚点约束</strong>下被逐个摆放、回溯、剪枝，最终收敛成精准占满棋盘的最优组合。</p>
+  <div class="gates">
+    <div class="gate" data-gate="enter"><b>① 锚点约束</b>：行优先最靠前的空格 = 当前块锚点</div>
+    <div class="gate" data-gate="mand"><b>② 必填可达性</b>：必填注定放不下 → 整条剪掉</div>
+    <div class="gate" data-gate="dead"><b>③ 前向剪枝</b>：造出孤立死洞 → 跳过该走法</div>
+    <div class="gate" data-gate="memo"><b>④ 死状态记忆化</b>：证伪状态不再展开</div>
+  </div>
+</header>
+
+<div class="controls">
+  <div><label>场景</label>
+    <select id="preset">
+      <option value="Fadia">法蒂亚 (5×5, 20格)</option>
+      <option value="sakiri">早雾 (5×5, 20格)</option>
+      <option value="Zankou">残虹 (5×5, 20格)</option>
+      <option value="Lacrimosa">安魂曲 (5×4, 满20格)</option>
+    </select>
+  </div>
+  <div><label>必填套装</label>
+    <select id="set"><option value="">— 无（仅填充）—</option></select>
+  </div>
+  <div><label>限定可选池</label><input type="checkbox" id="usePalette" /></div>
+  <button class="primary" id="gen">▶ 生成并分析</button>
+  <span class="hint" id="genhint"></span>
+</div>
+
+<div class="controls">
+  <button id="play">▶ 播放</button>
+  <button id="pause" disabled>⏸ 暂停</button>
+  <button id="step">⏭ 单步</button>
+  <button id="reset">⟲ 重置</button>
+  <button id="nextSol">⤳ 跳到下一方案</button>
+  <button id="toEnd">⏭⏭ 到结尾</button>
+  <label>速度</label>
+  <input type="range" id="speed" min="20" max="600" value="220" style="width:120px" />
+  <span class="hint" id="prog"></span>
+</div>
+
+<div class="main">
+  <div class="left">
+    <canvas id="board" width="320" height="320"></canvas>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--II)"></i>Ⅱ型</span>
+      <span><i class="sw" style="background:var(--III)"></i>Ⅲ型</span>
+      <span><i class="sw" style="background:var(--IV)"></i>Ⅳ型</span>
+      <span><i class="sw" style="background:var(--anchor)"></i>锚点</span>
+      <span><i class="sw" style="background:var(--dead)"></i>死洞</span>
+      <span><i class="sw" style="background:var(--mand)"></i>边=必填块</span>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="action" id="action"><span class="hint">点击「生成并分析」开始。</span></div>
+
+    <div class="card">
+      <h3>搜索统计</h3>
+      <div class="stats">
+        <div class="k">探索状态数</div><div class="v" id="s_states">0</div>
+        <div class="k">已记录方案</div><div class="v" id="s_sol">0</div>
+        <div class="k">前向剪枝(死洞)</div><div class="v" id="s_dead">0</div>
+        <div class="k">必填不可达剪枝</div><div class="v" id="s_mand">0</div>
+        <div class="k">死状态记忆化</div><div class="v" id="s_memo">0</div>
+        <div class="k">回溯次数</div><div class="v" id="s_back">0</div>
+        <div class="k">批去重剔除</div><div class="v" id="s_dedup">0</div>
+        <div class="k">事件总数</div><div class="v" id="s_ev">0</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>当前锚点的候选放置</h3>
+      <div class="hint" id="anchorInfo">—</div>
+      <div class="cands" id="cands"></div>
+    </div>
+
+    <div class="card">
+      <h3>事件日志</h3>
+      <div class="log" id="log"></div>
+    </div>
+
+    <div class="card">
+      <h3>合格方案（精准占满）· <span id="solCount" class="hint">0</span></h3>
+      <div class="solbar">
+        <label>排序</label>
+        <select id="sortSel">
+          <option value="">默认（少块优先）</option>
+          <option value="II">Ⅱ型优先</option>
+          <option value="III">Ⅲ型优先</option>
+          <option value="IV">Ⅳ型优先</option>
+        </select>
+        <span class="hint">点击缩略图可在画布大图查看</span>
+      </div>
+      <div class="gallery" id="gallery"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== 内嵌数据（与 src/data/shapes.js、public 一致） =====================
+const SHAPES = [
+  { id:'IV-stair', type:'IV', name:'Ⅳ阶梯', cells:[[0,1],[1,0],[1,1],[2,0]] },
+  { id:'IV-Z', type:'IV', name:'ⅣZ形', cells:[[0,1],[0,2],[1,0],[1,1]] },
+  { id:'IV-v4', type:'IV', name:'Ⅳ竖条', cells:[[0,0],[1,0],[2,0],[3,0]] },
+  { id:'IV-h4', type:'IV', name:'Ⅳ横条', cells:[[0,0],[0,1],[0,2],[0,3]] },
+  { id:'III-a', type:'III', name:'ⅢA', cells:[[0,0],[1,0],[1,1]] },
+  { id:'III-b', type:'III', name:'ⅢB', cells:[[0,0],[0,1],[1,0]] },
+  { id:'III-c', type:'III', name:'ⅢC', cells:[[0,1],[1,0],[1,1]] },
+  { id:'III-d', type:'III', name:'ⅢD', cells:[[0,0],[0,1],[1,1]] },
+  { id:'III-v3', type:'III', name:'Ⅲ竖三', cells:[[0,0],[1,0],[2,0]] },
+  { id:'III-h3', type:'III', name:'Ⅲ横三', cells:[[0,0],[0,1],[0,2]] },
+  { id:'II-v2', type:'II', name:'Ⅱ竖条', cells:[[0,0],[1,0]] },
+  { id:'II-h2', type:'II', name:'Ⅱ横条', cells:[[0,0],[0,1]] },
+];
+const SI = new Map(SHAPES.map((s,i)=>[s.id,i]));
+const SMAP = Object.fromEntries(SHAPES.map((s,i)=>[s.id,s]));
+const TYPE_COLOR = { II:'#5bb56b', III:'#4a8fd6', IV:'#e8a33d' };
+
+const CHARACTERS = {
+  Fadia: { rows:5, cols:5, available:[
+    [1,1,1,1,0],[1,1,1,1,0],[1,1,0,1,1],[0,1,1,1,1],[0,1,1,1,1]] },
+  Lacrimosa: { rows:5, cols:4, available:[
+    [1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] },
+  sakiri: { rows:5, cols:5, available:[
+    [1,1,0,1,1],[1,1,1,1,1],[1,1,1,1,1],[0,1,1,1,0],[0,1,1,1,0]] },
+  Zankou: { rows:5, cols:5, available:[
+    [0,1,1,1,1],[1,1,1,1,1],[1,1,1,0,1],[1,1,0,0,1],[1,1,1,1,0]] },
+};
+
+const SETS = [
+  { name:'迪亚波罗斯', slots:['II-v2','III-b','III-c','IV-h4'] },
+  { name:'恶魔之血-诅咒', slots:['II-v2','III-v3','III-b','IV-stair'] },
+  { name:'街头拳王', slots:['II-h2','III-h3','III-d','IV-Z'] },
+  { name:'森林萤火之心', slots:['II-h2','III-v3','III-a','IV-stair'] },
+  { name:'失落光芒', slots:['II-h2','III-a','III-d','IV-v4'] },
+  { name:'缇娜的夜间酒馆', slots:['II-v2','III-v3','III-a','III-b'] },
+  { name:'真红-双生蝶', slots:['II-v2','III-h3','III-c','IV-Z'] },
+  { name:'守卫王国', slots:['III-h3','III-v3','III-d','III-c'] },
+  { name:'音速蓝刺猬', slots:['III-a','III-b','III-d','III-c'] },
+  { name:'静谧山庄', slots:['II-h2','II-v2','IV-v4','IV-stair'] },
+  { name:'影之信条', slots:['II-v2','II-h2','IV-h4','IV-stair'] },
+  { name:'小小大冒险', slots:['II-h2','II-v2','IV-h4','IV-Z'] },
+];
+
+// ===================== 事件录制版 DFS（忠实复刻 solver.js） =====================
+function buildEvents(cfg) {
+  const { rows, cols, available, required={}, palette={}, usePalette=false, eventCap=6000 } = cfg;
+  const N = rows*cols;
+  const availArr = new Array(N).fill(false);
+  let totalAvail=0;
+  for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){ const ok=!!available[r][c]; availArr[r*cols+c]=ok; if(ok) totalAvail++; }
+  let availMask=0n; for (let k=0;k<N;k++) if (availArr[k]) availMask |= 1n<<BigInt(k);
+
+  const mand = new Array(SHAPES.length).fill(0);
+  const cap = new Array(SHAPES.length).fill(0);
+  for (const [sid,cnt] of Object.entries(required)) { const si=SI.get(sid); if(si===undefined) continue; const n=Math.max(0,Math.min(4,Number(cnt)|0)); if(n>0) mand[si]=n; }
+  for (const [sid,cnt] of Object.entries(palette||{})) { const si=SI.get(sid); if(si===undefined) continue; const n=Math.max(0,Math.min(4,Number(cnt)|0)); if(n>0) cap[si]=n; }
+  if (!usePalette) for (let si=0;si<SHAPES.length;si++) cap[si]=Infinity;
+  for (let si=0;si<SHAPES.length;si++) if (mand[si]>0 && cap[si]<mand[si]) cap[si]=mand[si];
+  const usable = si => cap[si]>0;
+
+  // 形状归一化：锚点 = 行优先最小格
+  const shapes = SHAPES.map(s=>{ let ar=s.cells[0][0],ac=s.cells[0][1]; for(const[r,c]of s.cells){ if(r<ar||(r===ar&&c<ac)){ar=r;ac=c;} } return { id:s.id, rel:s.cells.map(([r,c])=>[r-ar,c-ac]) }; });
+  const placementsAt = Array.from({length:N},()=>[]);
+  const placementsByShape = Array.from({length:shapes.length},()=>[]);
+  shapes.forEach((shp,si)=>{ if(!usable(si)) return; for(let i=0;i<N;i++){ if(!availArr[i]) continue; const r=Math.floor(i/cols),c=i%cols; const cells=[]; let ok=true; for(const[dr,dc]of shp.rel){ const rr=r+dr,cc=c+dc; if(rr<0||rr>=rows||cc<0||cc>=cols){ok=false;break;} const k=rr*cols+cc; if(!availArr[k]){ok=false;break;} cells.push(k);} if(!ok) continue; let mask=0n; for(const k of cells) mask|=1n<<BigInt(k); placementsAt[i].push({si,size:cells.length,cells,mask}); placementsByShape[si].push(mask); } });
+  for (const list of placementsAt) list.sort((a,b)=>b.size-a.size);
+
+  // 必填槽位
+  const slotOfShape=new Array(shapes.length).fill(-1), reqCounts=[], reqShapeIndex=[];
+  for (const [sid,cnt] of Object.entries(required)) { const si=SI.get(sid); if(si===undefined) continue; const n=Math.max(0,Math.min(4,Number(cnt)|0)); if(n<=0) continue; slotOfShape[si]=reqCounts.length; reqCounts.push(n); reqShapeIndex.push(si); }
+
+  const DIRS4=[[-1,0],[1,0],[0,-1],[0,1]];
+  const lowestFree = done => { for(let i=0;i<N;i++) if(availArr[i] && !((done>>BigInt(i))&1n)) return i; return -1; };
+  const emptyNb = (k,filled)=>{ const r=Math.floor(k/cols),c=k%cols; let n=0; for(const[dr,dc]of DIRS4){ const rr=r+dr,cc=c+dc; if(rr<0||rr>=rows||cc<0||cc>=cols) continue; const kk=rr*cols+cc; if(availArr[kk] && (filled&(1n<<BigInt(kk)))===0n) n++; } return n; };
+  const isDeadAfterPlace = (filled,cells)=>{ for(const k of cells){ const r=Math.floor(k/cols),c=k%cols; for(const[dr,dc]of DIRS4){ const rr=r+dr,cc=c+dc; if(rr<0||rr>=rows||cc<0||cc>=cols) continue; const kk=rr*cols+cc; if(availArr[kk] && (filled&(1n<<BigInt(kk)))===0n && emptyNb(kk,filled)===0) return true; } } return false; };
+
+  const events=[]; const seenBatch=new Set(); const deadMemo=new Set();
+  const stats={ states:0, sol:0, dead:0, mand:0, memo:0, back:0, dedup:0 };
+  const solutions=[];
+  const keyOf=(done,filled,rem,used)=> done.toString(36)+'|'+filled.toString(36)+'|'+rem.join(',')+'|'+used.join(',');
+
+  const path=[]; // {si, cells, consume}
+  const pushEv = o => { if(events.length<=eventCap) events.push(o); };
+
+  const movesAt = (i,done,filled,rem,used) => { const list=[]; for(const pm of placementsAt[i]){ if((filled&pm.mask)!==0n) continue; const si=pm.si; if(used[si]>=cap[si]) continue; const slot=slotOfShape[si]; const consume=slot>=0 && rem[slot]>0; const childRem=consume?rem.slice():rem; if(consume) childRem[slot]--; const childUsed=used.slice(); childUsed[si]++; list.push({ placement:pm, consume, childRem, childUsed, childDone:done|pm.mask, childFilled:filled|pm.mask }); } return list; };
+
+  const batchSig = walk => { const cnt={}; for(const mv of walk){ const id=shapes[mv.si].id; cnt[id]=(cnt[id]||0)+1; } return Object.entries(cnt).sort((a,b)=>a[0]<b[0]?-1:1).map(([k,v])=>`${k}×${v}`).join(','); };
+
+  function rec(done, filled, rem, used, boardCells) {
+    if (events.length>eventCap) { pushEv({type:'truncated'}); return; }
+    stats.states++;
+    const key=keyOf(done,filled,rem,used);
+    if (deadMemo.has(key)) { stats.memo++; pushEv({type:'memo', board:boardCells.slice(), blocks:path.map(p=>({si:p.si,consume:p.consume})), anchor:lowestFree(done)}); return; }
+    const i=lowestFree(done);
+    if (i===-1) {
+      if (rem.every(v=>v<=0) && filled===availMask) {
+        const sig=batchSig(path);
+        if (seenBatch.has(sig)) { stats.dedup++; }
+        else {
+          seenBatch.add(sig); stats.sol++;
+          const placements=path.map(mv=>({ blockId:shapes[mv.si].id, cells:mv.cells.map(k=>[Math.floor(k/cols),k%cols]), mandatory:mv.consume }));
+          pushEv({type:'solution', board:boardCells.slice(), blocks:path.map(p=>({si:p.si,consume:p.consume})), placements, anchor:-1});
+          if (solutions.length<300) solutions.push({ placements, board:boardCells.slice(), blocks:path.map(p=>({si:p.si,consume:p.consume})) });
+        }
+      }
+      return;
+    }
+    // 必填可达性
+    let ok2=true;
+    for (let s=0;s<rem.length && ok2;s++){ if(rem[s]<=0) continue; let any=false; for(const mask of placementsByShape[reqShapeIndex[s]]){ if((mask&done)===0n){any=true;break;} } if(!any) ok2=false; }
+    if (!ok2) { deadMemo.add(key); stats.mand++; pushEv({type:'prune-mand', board:boardCells.slice(), blocks:path.map(p=>({si:p.si,consume:p.consume})), anchor:i}); return; }
+
+    const cands=movesAt(i,done,filled,rem,used).map(m=>({ si:m.placement.si, cells:m.placement.cells, consume:m.consume }));
+    pushEv({type:'enter', board:boardCells.slice(), blocks:path.map(p=>({si:p.si,consume:p.consume})), anchor:i, candidates:cands});
+
+    let foundAny=false;
+    for (const mv of movesAt(i,done,filled,rem,used)) {
+      if (events.length>eventCap) { pushEv({type:'truncated'}); return; }
+      if (isDeadAfterPlace(mv.childFilled, mv.placement.cells)) {
+        stats.dead++;
+        pushEv({type:'prune-dead', board:boardCells.slice(), blocks:path.map(p=>({si:p.si,consume:p.consume})), anchor:i, move:{si:mv.placement.si,cells:mv.placement.cells,consume:mv.consume}});
+        continue;
+      }
+      const childBoard=boardCells.slice(); const bidx=path.length;
+      for (const k of mv.placement.cells) childBoard[k]=bidx;
+      path.push({ si:mv.placement.si, cells:mv.placement.cells, consume:mv.consume });
+      pushEv({type:'place', board:childBoard.slice(), blocks:path.map(p=>({si:p.si,consume:p.consume})), anchor:i, move:{si:mv.placement.si,cells:mv.placement.cells,consume:mv.consume}});
+      const before=stats.sol;
+      rec(mv.childDone, mv.childFilled, mv.childRem, mv.childUsed, childBoard);
+      if (stats.sol>before) foundAny=true;
+      path.pop();
+      pushEv({type:'backtrack', board:boardCells.slice(), blocks:path.map(p=>({si:p.si,consume:p.consume})), anchor:i, move:{si:mv.placement.si,cells:mv.placement.cells,consume:mv.consume}});
+      stats.back++;
+      if (events.length>eventCap) { pushEv({type:'truncated'}); return; }
+    }
+    if (!foundAny) deadMemo.add(key);
+  }
+  rec(0n,0n,reqCounts.slice(),new Array(SHAPES.length).fill(0),new Array(N).fill(-1));
+  if (events.length>eventCap) events.push({type:'truncated-final'});
+  return { events, stats, solutions, totalAvail, N, rows, cols, availArr };
+}
+
+// ===================== 渲染 =====================
+const canvas=document.getElementById('board'); const ctx=canvas.getContext('2d');
+let CELL=64;
+function setCanvasSize(rows,cols){ CELL = Math.min(72, Math.floor(360/Math.max(rows,cols))); canvas.width=cols*CELL; canvas.height=rows*CELL; }
+function lighten(hex,a){ return hex; }
+
+function drawBoard(ev, meta) {
+  const { rows, cols, availArr } = meta;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const board = ev.board || new Array(meta.N).fill(-1), blocks = ev.blocks || [];
+  for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){
+    const k=r*cols+c, x=c*CELL, y=r*CELL;
+    if (!availArr[k]) { ctx.fillStyle='#0b0d11'; ctx.fillRect(x,y,CELL,CELL); ctx.strokeStyle='#161b24'; ctx.strokeRect(x+.5,y+.5,CELL-1,CELL-1); continue; }
+    const b=board[k];
+    if (b>=0) { const shp=SHAPES[blocks[b].si]; const col=TYPE_COLOR[shp.type]; ctx.fillStyle=col; ctx.fillRect(x,y,CELL,CELL); ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.strokeRect(x+.5,y+.5,CELL-1,CELL-1); if(blocks[b].consume){ ctx.strokeStyle=getCss('--mand'); ctx.lineWidth=2.5; ctx.strokeRect(x+1.5,y+1.5,CELL-3,CELL-3); ctx.lineWidth=1; } }
+    else { ctx.fillStyle='#1a1f2a'; ctx.fillRect(x,y,CELL,CELL); ctx.strokeStyle='#252b37'; ctx.strokeRect(x+.5,y+.5,CELL-1,CELL-1); }
+  }
+  // 候选 ghost（enter）
+  if (ev.type==='enter' && ev.candidates) { ctx.save(); ctx.globalAlpha=0.28; ctx.setLineDash([4,3]); for(const cd of ev.candidates){ const col=TYPE_COLOR[SHAPES[cd.si].type]; ctx.fillStyle=col; ctx.strokeStyle='#fff'; for(const k of cd.cells){ const r=Math.floor(k/cols),c=k%cols; ctx.fillRect(c*CELL,r*CELL,CELL,CELL); ctx.strokeRect(c*CELL+.5,r*CELL+.5,CELL-1,CELL-1); } } ctx.restore(); }
+  // 放置/剪枝高亮当前 move
+    if (ev.move) { const m=ev.move; if(ev.type==='prune-dead'){ ctx.save(); ctx.globalAlpha=0.5; ctx.fillStyle=getCss('--dead'); for(const k of m.cells){ const r=Math.floor(k/cols),c=k%cols; ctx.fillRect(c*CELL,r*CELL,CELL,CELL);} ctx.restore(); // 死洞标记（用放置后的掩码判断，与 solver 一致）
+      let postMask=boardToMask(board,meta); for(const k of m.cells) postMask|=1n<<BigInt(k);
+      for(const k of m.cells){ const r=Math.floor(k/cols),c=k%cols; for(const[dr,dc]of DIRS4){ const rr=r+dr,cc=c+dc; if(rr<0||rr>=rows||cc<0||cc>=cols) continue; const kk=rr*cols+cc; if(availArr[kk] && !(board[kk]>=0) && emptyNb(kk, postMask)===0){ drawX(kk,meta); } } } }
+    else { ctx.save(); ctx.shadowColor=TYPE_COLOR[SHAPES[m.si].type]; ctx.shadowBlur=12; ctx.strokeStyle='#fff'; ctx.lineWidth=3; for(const k of m.cells){ const r=Math.floor(k/cols),c=k%cols; ctx.strokeRect(c*CELL+1.5,r*CELL+1.5,CELL-3,CELL-3);} ctx.restore(); }
+  }
+  // 锚点
+  if (ev.anchor!=null && ev.anchor>=0) { const r=Math.floor(ev.anchor/cols),c=ev.anchor%cols; ctx.save(); ctx.strokeStyle=getCss('--anchor'); ctx.lineWidth=3; ctx.setLineDash([5,3]); ctx.strokeRect(c*CELL+2,r*CELL+2,CELL-4,CELL-4); ctx.restore(); }
+}
+function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function emptyNb(k,filled){ /* filled 为 mask */ const {rows,cols,availArr}=curMeta; const r=Math.floor(k/cols),c=k%cols; let n=0; for(const[dr,dc]of DIRS4){ const rr=r+dr,cc=c+dc; if(rr<0||rr>=rows||cc<0||cc>=cols) continue; const kk=rr*cols+cc; if(availArr[kk] && !((filled>>BigInt(kk))&1n)) n++; } return n; }
+function boardToMask(board,meta){ let m=0n; for(let k=0;k<meta.N;k++) if(board[k]>=0) m|=1n<<BigInt(k); return m; }
+function drawX(k,meta){ const r=Math.floor(k/meta.cols),c=k%meta.cols; ctx.save(); ctx.strokeStyle=getCss('--dead'); ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(c*CELL+10,r*CELL+10); ctx.lineTo(c*CELL+CELL-10,r*CELL+CELL-10); ctx.moveTo(c*CELL+CELL-10,r*CELL+10); ctx.lineTo(c*CELL+10,r*CELL+CELL-10); ctx.stroke(); ctx.restore(); }
+const DIRS4=[[-1,0],[1,0],[0,-1],[0,1]];
+let curMeta=null;
+
+// ===================== 播放器 =====================
+let META=null, EVENTS=[], IDX=0, playing=false, timer=null;
+const $ = id => document.getElementById(id);
+
+function gateActive(g){ document.querySelectorAll('.gate').forEach(e=>e.classList.toggle('active', e.dataset.gate===g)); }
+
+function renderAt(i) {
+  if (i<0||i>=EVENTS.length) return;
+  const ev=EVENTS[i]; IDX=i;
+  drawBoard(ev, META);
+  const act=$('action'); let tag='', html='';
+  switch(ev.type){
+    case 'enter': tag='enter'; gateActive('enter');
+      html=`<b>锚点</b> = 第 ${ev.anchor} 格 (行${Math.floor(ev.anchor/META.cols)+1},列${ev.anchor%META.cols+1})。枚举该锚点上的 ${ev.candidates.length} 个合法放置，逐个尝试。`;
+      break;
+    case 'place': tag='place';
+      { const shp=SHAPES[ev.move.si]; html=`<b>放置</b> ${shp.name}（${shp.type}型）${ev.move.consume?'<span style="color:var(--mand)">·必填</span>':'<span style="color:var(--opt)">·可选</span>'}，向下递归。`; gateActive('enter'); }
+      break;
+    case 'prune-dead': tag='prune'; gateActive('dead');
+      { const shp=SHAPES[ev.move.si]; html=`<b>前向剪枝</b>：放 ${shp.name} 会造出<strong>孤立死洞</strong>（周围无可用的空邻格，最小块也占 2 格，注定填不上）→ 跳过该走法。`; }
+      break;
+    case 'prune-mand': tag='prune'; gateActive('mand');
+      html=`<b>必填可达性剪枝</b>：剩余必填形状在剩余空格里已无处可放 → 整条分支剪掉，记死状态。`;
+      break;
+    case 'backtrack': tag='back'; gateActive('enter');
+      { const shp=SHAPES[ev.move.si]; html=`<b>回溯</b>：撤销 ${shp.name}，回到锚点继续尝试下一个候选。`; }
+      break;
+    case 'memo': tag='memo'; gateActive('memo');
+      html=`<b>死状态记忆化</b>：该状态此前已证伪，直接跳过，不再重复展开。`;
+      break;
+    case 'solution': tag='sol';
+      html=`<b>★ 找到一个精准占满方案！</b> 全部 ${META.totalAvail} 格 100% 覆盖，必填全放下（批去重后第 ${META.prefix[IDX].sol} 个）。`;
+      break;
+    case 'truncated': case 'truncated-final': tag='prune';
+      html=`<b>事件记录已截断</b>（为动画性能）。真实求解不截断、会穷举到底。`;
+      break;
+  }
+  act.innerHTML=`<span class="tag ${tag}">${tagLabel(tag)}</span>${html}`;
+  updateStats();
+  updateCands(ev);
+  $('prog').textContent=`事件 ${IDX+1} / ${EVENTS.length}`;
+  if (ev.type==='solution') addLog(`★ 方案 #${stats_sol()} 记录`);
+}
+
+function tagLabel(t){ return {enter:'锚点',place:'放置',prune:'剪枝',back:'回溯',sol:'方案',memo:'记忆化'}[t]||t; }
+function stats_sol(){ return Number($('s_sol').textContent); }
+function updateStats(){ const p=META.prefix[IDX]||{states:0,sol:0,dead:0,mand:0,memo:0,back:0}; $('s_states').textContent=p.states; $('s_sol').textContent=p.sol; $('s_dead').textContent=p.dead; $('s_mand').textContent=p.mand; $('s_memo').textContent=p.memo; $('s_back').textContent=p.back; $('s_dedup').textContent=META.stats.dedup; $('s_ev').textContent=EVENTS.length; }
+let curStats={states:0,sol:0,dead:0,mand:0,memo:0,back:0,dedup:0};
+function updateCands(ev){
+  const el=$('cands'); $('anchorInfo').textContent = ev.anchor!=null&&ev.anchor>=0 ? `锚点格 #${ev.anchor}（行${Math.floor(ev.anchor/META.cols)+1},列${ev.anchor%META.cols+1}）` : '—';
+  if (ev.type==='enter' && ev.candidates){ el.innerHTML=ev.candidates.map(cd=>{ const shp=SHAPES[cd.si]; return `<span class="cand">${shp.name}${cd.consume?'·必填':''}</span>`; }).join(''); }
+  else if (ev.move) { const shp=SHAPES[ev.move.si]; el.innerHTML=`<span class="cand ${ev.type==='prune-dead'?'pruned':'tried'}">${shp.name}${ev.move.consume?'·必填':''}${ev.type==='prune-dead'?' ✕死洞':''}</span>`; }
+  else el.innerHTML='';
+}
+function addLog(t){ const l=$('log'); const d=document.createElement('div'); d.textContent=t; l.appendChild(d); while(l.children.length>200) l.removeChild(l.firstChild); l.scrollTop=l.scrollHeight; }
+
+// 方案画廊
+function renderGallery(){
+  const sel=$('sortSel').value;
+  let list=META.solutionsRaw.slice();
+  if (sel){ const score=s=>s.placements.filter(p=>SMAP[p.blockId].type===sel).length; list.sort((a,b)=>score(b)-score(a)||a.placements.length-b.placements.length); }
+  else list.sort((a,b)=>a.placements.length-b.placements.length);
+  const g=$('gallery'); g.innerHTML=''; $('solCount').textContent=list.length;
+  const tc=Math.min(28, Math.floor(150/Math.max(META.rows,META.cols)));
+  list.forEach((sol,idx)=>{ const wrap=document.createElement('div'); wrap.className='sol-thumb'; const cv=document.createElement('canvas'); cv.width=META.cols*tc; cv.height=META.rows*tc; drawMini(cv, sol, tc); const cap=document.createElement('div'); cap.className='cap'; const cnt={II:0,III:0,IV:0}; sol.placements.forEach(p=>cnt[SMAP[p.blockId].type]++); cap.textContent=`${sol.placements.length}块 Ⅱ${cnt.II}Ⅲ${cnt.III}Ⅳ${cnt.IV}`; wrap.appendChild(cv); wrap.appendChild(cap); wrap.onclick=()=>{ drawStaticSolution(sol); }; g.appendChild(wrap); });
+}
+function drawMini(cv, sol, tc){
+  const c=cv.getContext('2d'); const {rows,cols}=META; c.clearRect(0,0,cv.width,cv.height);
+  const grid=Array.from({length:rows},()=>Array(cols).fill(-1));
+  sol.placements.forEach((p,bi)=>p.cells.forEach(([r,cc])=>grid[r][cc]=bi));
+  for(let r=0;r<rows;r++)for(let cc=0;cc<cols;cc++){ const x=cc*tc,y=r*tc; const b=grid[r][cc]; if(b<0){c.fillStyle='#13161d';} else { c.fillStyle=TYPE_COLOR[SMAP[sol.placements[b].blockId].type]; } c.fillRect(x,y,tc,tc); c.strokeStyle='#0b0d11'; c.strokeRect(x+.5,y+.5,tc-1,tc-1); }
+}
+function drawStaticSolution(sol){
+  const ev={ type:'solution', board:Array(META.N).fill(-1), blocks:sol.placements.map(p=>({si:SI.get(p.blockId),consume:p.mandatory})), anchor:-1, placements:sol.placements };
+  sol.placements.forEach((p,bi)=>p.cells.forEach(([r,c])=>ev.board[r*META.cols+c]=bi));
+  curMeta=META; drawBoard(ev,META); $('action').innerHTML='<span class="tag sol">方案</span>点击画廊中的其它缩略图可切换查看。';
+}
+
+// ===================== 控制 =====================
+function generate(){
+  const preset=$('preset').value;
+  const base = CHARACTERS[preset];
+  const setVal=$('set').value;
+  const required={};
+  if (setVal){ const s=SETS.find(x=>x.name===setVal); if(s) s.slots.forEach(id=>required[id]=(required[id]||0)+1); }
+  const cfg = { rows:base.rows, cols:base.cols, available:base.available, required, usePalette:$('usePalette').checked, eventCap:6000 };
+  META = buildEvents(cfg);
+  META.solutionsRaw=META.solutions;
+  // 逐事件累计统计，让面板随播放递增（dedup 为最终汇总值）
+  const pre={states:0,sol:0,dead:0,mand:0,memo:0,back:0}; const prefix=[];
+  for (const ev of META.events){
+    if (ev.type==='memo') pre.memo++;
+    else if (ev.type==='prune-mand') pre.mand++;
+    else if (ev.type==='enter') pre.states++;
+    else if (ev.type==='solution') { pre.states++; pre.sol++; }
+    else if (ev.type==='backtrack') pre.back++;
+    else if (ev.type==='prune-dead') pre.dead++;
+    prefix.push({ ...pre });
+  }
+  META.prefix=prefix;
+  curStats=META.stats; curMeta=META;
+  setCanvasSize(base.rows,base.cols);
+  EVENTS=META.events; IDX=0;
+  $('log').innerHTML='';
+  const capNote = EVENTS.length>cfg.eventCap?'（事件已截断，真实求解不截断）':'';
+  $('genhint').textContent=`场景=${preset}，必填=${setVal||'无'}，事件=${EVENTS.length}${capNote}`;
+  renderGallery();
+  renderAt(0);
+  stopPlay();
+}
+function step(){ if(IDX<EVENTS.length-1) renderAt(IDX+1); else stopPlay(); }
+function play(){ if(playing) return; if(IDX>=EVENTS.length-1) IDX=0; playing=true; $('play').disabled=true; $('pause').disabled=false; const tick=()=>{ if(!playing) return; if(IDX>=EVENTS.length-1){ stopPlay(); return; } renderAt(IDX+1); timer=setTimeout(tick, Number($('speed').value)); }; tick(); }
+function stopPlay(){ playing=false; clearTimeout(timer); $('play').disabled=false; $('pause').disabled=true; }
+function reset(){ stopPlay(); IDX=0; renderAt(0); }
+function skipToNextSolution(){ stopPlay(); for(let i=IDX+1;i<EVENTS.length;i++){ if(EVENTS[i].type==='solution'){ renderAt(i); return; } } renderAt(EVENTS.length-1); }
+function toEnd(){ stopPlay(); renderAt(EVENTS.length-1); }
+// 切换容器下拉时，立即把该容器的形状（含空洞）画到 canvas#board，无需点「生成」
+function previewContainer(){
+  const preset=$('preset').value;
+  const base = CHARACTERS[preset];
+  const rows=base.rows, cols=base.cols, N=rows*cols;
+  const availArr=new Array(N).fill(false);
+  for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) availArr[r*cols+c]=!!base.available[r][c];
+  setCanvasSize(rows,cols);
+  curMeta={ rows, cols, availArr, N };
+  drawBoard({}, curMeta);
+  const usable=availArr.filter(Boolean).length;
+  $('genhint').textContent=`容器=${preset}（${rows}×${cols}，可用 ${usable} 格）。点击「生成」开始分析。`;
+  $('prog').textContent='事件 — / —';
+  $('anchorInfo').textContent='—';
+  $('cands').innerHTML='';
+  $('action').innerHTML='<span class="tag enter">容器</span>已加载容器轮廓，点击「生成」运行求解动画。';
+}
+
+// ===================== 初始化 =====================
+(function init(){
+  const setSel=$('set'); SETS.forEach(s=>{ const o=document.createElement('option'); o.value=s.name; o.textContent=s.name; setSel.appendChild(o); });
+  $('gen').onclick=generate;
+  $('preset').onchange=previewContainer;
+  $('play').onclick=play; $('pause').onclick=stopPlay; $('step').onclick=step; $('reset').onclick=reset;
+  $('nextSol').onclick=skipToNextSolution; $('toEnd').onclick=toEnd;
+  $('sortSel').onchange=renderGallery;
+  $('speed').oninput=()=>{};
+  generate();
+})();
+</script>
+</body>
+</html>
