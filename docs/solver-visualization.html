@@ -63,11 +63,21 @@
   .sol-thumb:hover { border-color: var(--accent); }
   .sol-thumb canvas { background: #0b0d11; border: none; display: block; }
   .sol-thumb .cap { font-size: 10px; color: var(--dim); text-align: center; margin-top: 2px; }
-  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--dim); margin-top: 10px; }
+  .sol-thumb .cap2 { display: flex; flex-wrap: wrap; gap: 1px 5px; justify-content: center; margin-top: 3px; max-width: 150px; }
+  .chip { display: inline-flex; align-items: center; gap: 3px; font-size: 9.5px; color: var(--dim); white-space: nowrap; }
+  .chip i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: 0 0 auto; }
+  .legend { max-width: 360px; display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--dim); margin-top: 10px; }
   .legend span { display: inline-flex; align-items: center; gap: 5px; }
   .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
   .hint { color: var(--dim); font-size: 12px; }
   code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .checkbox-row { display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
+  .palette-grid { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .palette-cell { position:relative; display:flex; flex-direction:column; align-items:center; border:1px solid var(--line); border-radius:6px; padding:4px 4px 2px; background:var(--panel2); cursor:pointer; width:50px; }
+  .palette-cell.active { border-color: var(--II); box-shadow:0 0 0 1px var(--II) inset; }
+  .palette-cell .nm { font-size:10px; color:var(--dim); margin-top:2px; line-height:1.1; text-align:center; }
+  .palette-cell .badge { position:absolute; top:-7px; right:-7px; background:var(--accent); color:#1a1206; font-size:11px; font-weight:700; border-radius:10px; padding:0 5px; min-width:16px; text-align:center; }
+  .palette-cell canvas { display:block; }
 </style>
 </head>
 <body>
@@ -94,9 +104,20 @@
   <div><label>必填套装</label>
     <select id="set"><option value="">— 无（仅填充）—</option></select>
   </div>
-  <div><label>限定可选池</label><input type="checkbox" id="usePalette" /></div>
   <button class="primary" id="gen">▶ 生成并分析</button>
   <span class="hint" id="genhint"></span>
+</div>
+
+<div class="controls" style="flex-direction:column; align-items:flex-start; gap:8px;">
+  <div style="display:flex; gap:22px; align-items:center; flex-wrap:wrap;">
+    <label class="checkbox-row"><input type="checkbox" id="usePalette" /><span>限定可选形状池（关闭则按旧逻辑用全部形状填空）</span></label>
+    <label class="checkbox-row" id="vanityWrap" style="opacity:.4"><input type="checkbox" id="vanity" disabled /><span>虚荣模式：套装块变非必选，全部所选形状均为可选池</span></label>
+  </div>
+  <div class="hint" id="poolHint">未开启「限定可选形状池」：剩余空格使用全部形状填充（旧逻辑），此池不起作用。</div>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start;">
+    <span class="hint" style="margin:6px 2px 0 0;">可选形状池（左键循环 1→2→3→4→清除，右键清除）：</span>
+    <div id="paletteGrid" class="palette-grid" style="opacity:.4; pointer-events:none;"></div>
+  </div>
 </div>
 
 <div class="controls">
@@ -115,12 +136,13 @@
   <div class="left">
     <canvas id="board" width="320" height="320"></canvas>
     <div class="legend">
-      <span><i class="sw" style="background:var(--II)"></i>Ⅱ型</span>
-      <span><i class="sw" style="background:var(--III)"></i>Ⅲ型</span>
-      <span><i class="sw" style="background:var(--IV)"></i>Ⅳ型</span>
+      <span><i class="sw" style="width:30px;background:linear-gradient(90deg,#448850,#5bb56b,#94cf9f)"></i>Ⅱ型</span>
+      <span><i class="sw" style="width:30px;background:linear-gradient(90deg,#25486b,#4a8fd6,#a5c7eb)"></i>Ⅲ型</span>
+      <span><i class="sw" style="width:30px;background:linear-gradient(90deg,#805a22,#e8a33d,#f2cc94)"></i>Ⅳ型</span>
       <span><i class="sw" style="background:var(--anchor)"></i>锚点</span>
       <span><i class="sw" style="background:var(--dead)"></i>死洞</span>
       <span><i class="sw" style="background:var(--mand)"></i>边=必填块</span>
+      <span class="hint">同类型内「深浅不同」= 不同具体形状（见缩略图下方的色块+名称）</span>
     </div>
   </div>
 
@@ -189,6 +211,25 @@ const SI = new Map(SHAPES.map((s,i)=>[s.id,i]));
 const SMAP = Object.fromEntries(SHAPES.map((s,i)=>[s.id,s]));
 const TYPE_COLOR = { II:'#5bb56b', III:'#4a8fd6', IV:'#e8a33d' };
 
+/* 同类型内按「具体形状」给不同深浅：保证一眼仍能看出类型同族，又能区分具体形状。
+   背景：批去重(batchSig)是按「具体形状 ID 多重集」判重的，但若同类型的形状都同色，
+   就会出现「多重集不同 → 去重拦不住，但渲染出来完全一样」的假重复方案。
+   这里让 12 种形状各自可辨（配合块间缝隙 + 缩略图标签里的形状名）。 */
+const SHAPE_SHADE = {
+  'IV-stair': -0.45, 'IV-Z': -0.15, 'IV-v4': 0.15, 'IV-h4': 0.45,
+  'III-a': -0.50, 'III-b': -0.30, 'III-c': -0.10, 'III-d': 0.10, 'III-v3': 0.30, 'III-h3': 0.50,
+  'II-v2': -0.25, 'II-h2': 0.35,
+};
+// amt>0 向白混合、amt<0 向黑混合（-1..1）
+function shadeHex(hex, amt){
+  const n=parseInt(hex.slice(1),16); let r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+  const t=amt>=0?255:0, k=Math.abs(amt);
+  r=Math.round(r+(t-r)*k); g=Math.round(g+(t-g)*k); b=Math.round(b+(t-b)*k);
+  return '#'+((r<<16)|(g<<8)|b).toString(16).padStart(6,'0');
+}
+const SHAPE_COLOR = Object.fromEntries(SHAPES.map(s=>[s.id, shadeHex(TYPE_COLOR[s.type], SHAPE_SHADE[s.id]??0)]));
+const shapeColor = id => SHAPE_COLOR[id] || (SMAP[id] ? TYPE_COLOR[SMAP[id].type] : '#888');
+
 const CHARACTERS = {
   Fadia: { rows:5, cols:5, available:[
     [1,1,1,1,0],[1,1,1,1,0],[1,1,0,1,1],[0,1,1,1,1],[0,1,1,1,1]] },
@@ -217,7 +258,7 @@ const SETS = [
 
 // ===================== 事件录制版 DFS（忠实复刻 solver.js） =====================
 function buildEvents(cfg) {
-  const { rows, cols, available, required={}, palette={}, usePalette=false, eventCap=6000 } = cfg;
+  const { rows, cols, available, required={}, palette={}, usePalette=false, vanity=false, eventCap=6000 } = cfg;
   const N = rows*cols;
   const availArr = new Array(N).fill(false);
   let totalAvail=0;
@@ -226,9 +267,11 @@ function buildEvents(cfg) {
 
   const mand = new Array(SHAPES.length).fill(0);
   const cap = new Array(SHAPES.length).fill(0);
-  for (const [sid,cnt] of Object.entries(required)) { const si=SI.get(sid); if(si===undefined) continue; const n=Math.max(0,Math.min(4,Number(cnt)|0)); if(n>0) mand[si]=n; }
+  // 虚荣模式：套装形状非必选，mand 恒为 0（与 src/utils/solver.js 一致）
+  if (!vanity) for (const [sid,cnt] of Object.entries(required)) { const si=SI.get(sid); if(si===undefined) continue; const n=Math.max(0,Math.min(4,Number(cnt)|0)); if(n>0) mand[si]=n; }
   for (const [sid,cnt] of Object.entries(palette||{})) { const si=SI.get(sid); if(si===undefined) continue; const n=Math.max(0,Math.min(4,Number(cnt)|0)); if(n>0) cap[si]=n; }
-  if (!usePalette) for (let si=0;si<SHAPES.length;si++) cap[si]=Infinity;
+  // 未开启「可选形状池」且非虚荣模式：恢复旧逻辑——剩余空间用全部形状（无数量上限）填充
+  if (!usePalette && !vanity) for (let si=0;si<SHAPES.length;si++) cap[si]=Infinity;
   for (let si=0;si<SHAPES.length;si++) if (mand[si]>0 && cap[si]<mand[si]) cap[si]=mand[si];
   const usable = si => cap[si]>0;
 
@@ -239,9 +282,9 @@ function buildEvents(cfg) {
   shapes.forEach((shp,si)=>{ if(!usable(si)) return; for(let i=0;i<N;i++){ if(!availArr[i]) continue; const r=Math.floor(i/cols),c=i%cols; const cells=[]; let ok=true; for(const[dr,dc]of shp.rel){ const rr=r+dr,cc=c+dc; if(rr<0||rr>=rows||cc<0||cc>=cols){ok=false;break;} const k=rr*cols+cc; if(!availArr[k]){ok=false;break;} cells.push(k);} if(!ok) continue; let mask=0n; for(const k of cells) mask|=1n<<BigInt(k); placementsAt[i].push({si,size:cells.length,cells,mask}); placementsByShape[si].push(mask); } });
   for (const list of placementsAt) list.sort((a,b)=>b.size-a.size);
 
-  // 必填槽位
+  // 必填槽位（虚荣模式下无必填，套装形状仅作可选池）
   const slotOfShape=new Array(shapes.length).fill(-1), reqCounts=[], reqShapeIndex=[];
-  for (const [sid,cnt] of Object.entries(required)) { const si=SI.get(sid); if(si===undefined) continue; const n=Math.max(0,Math.min(4,Number(cnt)|0)); if(n<=0) continue; slotOfShape[si]=reqCounts.length; reqCounts.push(n); reqShapeIndex.push(si); }
+  if (!vanity) for (const [sid,cnt] of Object.entries(required)) { const si=SI.get(sid); if(si===undefined) continue; const n=Math.max(0,Math.min(4,Number(cnt)|0)); if(n<=0) continue; slotOfShape[si]=reqCounts.length; reqCounts.push(n); reqShapeIndex.push(si); }
 
   const DIRS4=[[-1,0],[1,0],[0,-1],[0,1]];
   const lowestFree = done => { for(let i=0;i<N;i++) if(availArr[i] && !((done>>BigInt(i))&1n)) return i; return -1; };
@@ -320,6 +363,32 @@ let CELL=64;
 function setCanvasSize(rows,cols){ CELL = Math.min(72, Math.floor(360/Math.max(rows,cols))); canvas.width=cols*CELL; canvas.height=rows*CELL; }
 function lighten(hex,a){ return hex; }
 
+/* 画出每个块的「外轮廓缝」：只在块与非同块（或空洞 / 棋盘边界）相邻的那条边描线。
+   作用：批去重是按具体形状判重的；若同类型形状同色，两个不同方案会长得一模一样。
+   把块间缝隙描出来后，配合同类型内的深浅差异，就能看出「右下那块是怎么切开的」。 */
+function outlineBlocks(board, meta){
+  const { rows, cols } = meta;
+  const byBlock = new Map();
+  for (let k=0;k<meta.N;k++){ const b=board[k]; if(b<0) continue; let a=byBlock.get(b); if(!a){ a=[]; byBlock.set(b,a); } a.push(k); }
+  ctx.save();
+  ctx.strokeStyle = '#0b0d11';           // 与底板同色 → 视觉上是「块与块之间的缝」
+  ctx.lineWidth = Math.max(2, CELL*0.075);
+  ctx.lineCap = 'butt';
+  for (const ks of byBlock.values()){
+    const set = new Set(ks);
+    ctx.beginPath();
+    for (const k of ks){
+      const r=Math.floor(k/cols), c=k%cols, x=c*CELL, y=r*CELL;
+      if (!(r>0        && set.has(k-cols))) { ctx.moveTo(x,y);        ctx.lineTo(x+CELL,y); }
+      if (!(r<rows-1   && set.has(k+cols))) { ctx.moveTo(x,y+CELL);   ctx.lineTo(x+CELL,y+CELL); }
+      if (!(c>0        && set.has(k-1)))    { ctx.moveTo(x,y);        ctx.lineTo(x,y+CELL); }
+      if (!(c<cols-1   && set.has(k+1)))    { ctx.moveTo(x+CELL,y);   ctx.lineTo(x+CELL,y+CELL); }
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawBoard(ev, meta) {
   const { rows, cols, availArr } = meta;
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -328,16 +397,18 @@ function drawBoard(ev, meta) {
     const k=r*cols+c, x=c*CELL, y=r*CELL;
     if (!availArr[k]) { ctx.fillStyle='#0b0d11'; ctx.fillRect(x,y,CELL,CELL); ctx.strokeStyle='#161b24'; ctx.strokeRect(x+.5,y+.5,CELL-1,CELL-1); continue; }
     const b=board[k];
-    if (b>=0) { const shp=SHAPES[blocks[b].si]; const col=TYPE_COLOR[shp.type]; ctx.fillStyle=col; ctx.fillRect(x,y,CELL,CELL); ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.strokeRect(x+.5,y+.5,CELL-1,CELL-1); if(blocks[b].consume){ ctx.strokeStyle=getCss('--mand'); ctx.lineWidth=2.5; ctx.strokeRect(x+1.5,y+1.5,CELL-3,CELL-3); ctx.lineWidth=1; } }
+    if (b>=0) { const shp=SHAPES[blocks[b].si]; const col=shapeColor(shp.id); ctx.fillStyle=col; ctx.fillRect(x,y,CELL,CELL); ctx.strokeStyle='rgba(0,0,0,.22)'; ctx.strokeRect(x+.5,y+.5,CELL-1,CELL-1); if(blocks[b].consume){ ctx.strokeStyle=getCss('--mand'); ctx.lineWidth=2.5; ctx.strokeRect(x+1.5,y+1.5,CELL-3,CELL-3); ctx.lineWidth=1; } }
     else { ctx.fillStyle='#1a1f2a'; ctx.fillRect(x,y,CELL,CELL); ctx.strokeStyle='#252b37'; ctx.strokeRect(x+.5,y+.5,CELL-1,CELL-1); }
   }
+  // 块间缝隙：让「同类型、不同具体形状」的分割也看得出来（否则会像重复方案）
+  outlineBlocks(board, meta);
   // 候选 ghost（enter）
-  if (ev.type==='enter' && ev.candidates) { ctx.save(); ctx.globalAlpha=0.28; ctx.setLineDash([4,3]); for(const cd of ev.candidates){ const col=TYPE_COLOR[SHAPES[cd.si].type]; ctx.fillStyle=col; ctx.strokeStyle='#fff'; for(const k of cd.cells){ const r=Math.floor(k/cols),c=k%cols; ctx.fillRect(c*CELL,r*CELL,CELL,CELL); ctx.strokeRect(c*CELL+.5,r*CELL+.5,CELL-1,CELL-1); } } ctx.restore(); }
+  if (ev.type==='enter' && ev.candidates) { ctx.save(); ctx.globalAlpha=0.28; ctx.setLineDash([4,3]); for(const cd of ev.candidates){ const col=shapeColor(SHAPES[cd.si].id); ctx.fillStyle=col; ctx.strokeStyle='#fff'; for(const k of cd.cells){ const r=Math.floor(k/cols),c=k%cols; ctx.fillRect(c*CELL,r*CELL,CELL,CELL); ctx.strokeRect(c*CELL+.5,r*CELL+.5,CELL-1,CELL-1); } } ctx.restore(); }
   // 放置/剪枝高亮当前 move
     if (ev.move) { const m=ev.move; if(ev.type==='prune-dead'){ ctx.save(); ctx.globalAlpha=0.5; ctx.fillStyle=getCss('--dead'); for(const k of m.cells){ const r=Math.floor(k/cols),c=k%cols; ctx.fillRect(c*CELL,r*CELL,CELL,CELL);} ctx.restore(); // 死洞标记（用放置后的掩码判断，与 solver 一致）
       let postMask=boardToMask(board,meta); for(const k of m.cells) postMask|=1n<<BigInt(k);
       for(const k of m.cells){ const r=Math.floor(k/cols),c=k%cols; for(const[dr,dc]of DIRS4){ const rr=r+dr,cc=c+dc; if(rr<0||rr>=rows||cc<0||cc>=cols) continue; const kk=rr*cols+cc; if(availArr[kk] && !(board[kk]>=0) && emptyNb(kk, postMask)===0){ drawX(kk,meta); } } } }
-    else { ctx.save(); ctx.shadowColor=TYPE_COLOR[SHAPES[m.si].type]; ctx.shadowBlur=12; ctx.strokeStyle='#fff'; ctx.lineWidth=3; for(const k of m.cells){ const r=Math.floor(k/cols),c=k%cols; ctx.strokeRect(c*CELL+1.5,r*CELL+1.5,CELL-3,CELL-3);} ctx.restore(); }
+    else { ctx.save(); ctx.shadowColor=shapeColor(SHAPES[m.si].id); ctx.shadowBlur=12; ctx.strokeStyle='#fff'; ctx.lineWidth=3; for(const k of m.cells){ const r=Math.floor(k/cols),c=k%cols; ctx.strokeRect(c*CELL+1.5,r*CELL+1.5,CELL-3,CELL-3);} ctx.restore(); }
   }
   // 锚点
   if (ev.anchor!=null && ev.anchor>=0) { const r=Math.floor(ev.anchor/cols),c=ev.anchor%cols; ctx.save(); ctx.strokeStyle=getCss('--anchor'); ctx.lineWidth=3; ctx.setLineDash([5,3]); ctx.strokeRect(c*CELL+2,r*CELL+2,CELL-4,CELL-4); ctx.restore(); }
@@ -413,18 +484,87 @@ function renderGallery(){
   else list.sort((a,b)=>a.placements.length-b.placements.length);
   const g=$('gallery'); g.innerHTML=''; $('solCount').textContent=list.length;
   const tc=Math.min(28, Math.floor(150/Math.max(META.rows,META.cols)));
-  list.forEach((sol,idx)=>{ const wrap=document.createElement('div'); wrap.className='sol-thumb'; const cv=document.createElement('canvas'); cv.width=META.cols*tc; cv.height=META.rows*tc; drawMini(cv, sol, tc); const cap=document.createElement('div'); cap.className='cap'; const cnt={II:0,III:0,IV:0}; sol.placements.forEach(p=>cnt[SMAP[p.blockId].type]++); cap.textContent=`${sol.placements.length}块 Ⅱ${cnt.II}Ⅲ${cnt.III}Ⅳ${cnt.IV}`; wrap.appendChild(cv); wrap.appendChild(cap); wrap.onclick=()=>{ drawStaticSolution(sol); }; g.appendChild(wrap); });
+  list.forEach((sol,idx)=>{ const wrap=document.createElement('div'); wrap.className='sol-thumb'; const cv=document.createElement('canvas'); cv.width=META.cols*tc; cv.height=META.rows*tc; drawMini(cv, sol, tc);
+    const cnt={II:0,III:0,IV:0}; sol.placements.forEach(p=>cnt[SMAP[p.blockId].type]++);
+    const cap=document.createElement('div'); cap.className='cap'; cap.textContent=`${sol.placements.length}块 Ⅱ${cnt.II}Ⅲ${cnt.III}Ⅳ${cnt.IV}`;
+    // 具体形状清单（按形状着色的小色块 + 名称）：与缩略图里的深浅一一对应，
+    // 用于区分「同类型、不同具体形状」的方案（这就是它们看起来一样却其实是不同解的原因）
+    const ms=new Map(); for(const p of sol.placements) ms.set(p.blockId,(ms.get(p.blockId)||0)+1);
+    const cap2=document.createElement('div'); cap2.className='cap2';
+    cap2.innerHTML=[...ms.entries()].sort((a,b)=>SMAP[a[0]].type.localeCompare(SMAP[b[0]].type)||a[0].localeCompare(b[0]))
+      .map(([id,n])=>`<span class="chip"><i style="background:${shapeColor(id)}"></i>${SMAP[id].name}${n>1?'×'+n:''}</span>`).join('');
+    const detail=[...ms.entries()].map(([id,n])=>`${id}${n>1?'×'+n:''}`).join(', ');
+    wrap.title=`方案 #${idx+1} · ${sol.placements.length}块\n具体形状：${detail}`;
+    wrap.appendChild(cv); wrap.appendChild(cap); wrap.appendChild(cap2); wrap.onclick=()=>{ drawStaticSolution(sol); }; g.appendChild(wrap); });
 }
 function drawMini(cv, sol, tc){
   const c=cv.getContext('2d'); const {rows,cols}=META; c.clearRect(0,0,cv.width,cv.height);
   const grid=Array.from({length:rows},()=>Array(cols).fill(-1));
   sol.placements.forEach((p,bi)=>p.cells.forEach(([r,cc])=>grid[r][cc]=bi));
-  for(let r=0;r<rows;r++)for(let cc=0;cc<cols;cc++){ const x=cc*tc,y=r*tc; const b=grid[r][cc]; if(b<0){c.fillStyle='#13161d';} else { c.fillStyle=TYPE_COLOR[SMAP[sol.placements[b].blockId].type]; } c.fillRect(x,y,tc,tc); c.strokeStyle='#0b0d11'; c.strokeRect(x+.5,y+.5,tc-1,tc-1); }
+  for(let r=0;r<rows;r++)for(let cc=0;cc<cols;cc++){ const x=cc*tc,y=r*tc; const b=grid[r][cc]; c.fillStyle = b<0 ? '#13161d' : shapeColor(sol.placements[b].blockId); c.fillRect(x,y,tc,tc); }
+  // 块间缝隙：让同类型的不同形状也能看出分割（否则两个不同方案会长得一模一样）
+  c.save(); c.strokeStyle='#13161d'; c.lineWidth=Math.max(1.5,tc*0.1); c.lineCap='butt';
+  for(const p of sol.placements){
+    const set=new Set(p.cells.map(([r,cc])=>r*cols+cc));
+    c.beginPath();
+    for(const [r,cc] of p.cells){ const k=r*cols+cc, x=cc*tc, y=r*tc;
+      if(!(r>0       && set.has(k-cols))){ c.moveTo(x,y);      c.lineTo(x+tc,y); }
+      if(!(r<rows-1  && set.has(k+cols))){ c.moveTo(x,y+tc);   c.lineTo(x+tc,y+tc); }
+      if(!(cc>0      && set.has(k-1)))   { c.moveTo(x,y);      c.lineTo(x,y+tc); }
+      if(!(cc<cols-1 && set.has(k+1)))   { c.moveTo(x+tc,y);   c.lineTo(x+tc,y+tc); }
+    }
+    c.stroke();
+  }
+  c.restore();
 }
 function drawStaticSolution(sol){
   const ev={ type:'solution', board:Array(META.N).fill(-1), blocks:sol.placements.map(p=>({si:SI.get(p.blockId),consume:p.mandatory})), anchor:-1, placements:sol.placements };
   sol.placements.forEach((p,bi)=>p.cells.forEach(([r,c])=>ev.board[r*META.cols+c]=bi));
   curMeta=META; drawBoard(ev,META); $('action').innerHTML='<span class="tag sol">方案</span>点击画廊中的其它缩略图可切换查看。';
+}
+
+// ===================== 可选形状池 / 虚荣模式 UI（与 ConditionPanel 行为对齐） =====================
+let PALETTE = {};   // 形状 id -> 数量(1..4)，可选形状池（库存上限）
+let VANITY = false; // 虚荣模式：限定可选形状池的分支，套装块变非必选
+
+function drawShapeMini(cv, shp, cs){
+  const c=cv.getContext('2d'); const W=cv.width, H=cv.height; c.clearRect(0,0,W,H);
+  let maxR=0,maxC=0; for(const[r,cc]of shp.cells){ if(r>maxR)maxR=r; if(cc>maxC)maxC=cc; }
+  const w=(maxC+1)*cs, h=(maxR+1)*cs, ox=(W-w)/2, oy=(H-h)/2, col=shapeColor(shp.id);
+  for(const[r,cc]of shp.cells){ c.fillStyle=col; c.fillRect(ox+cc*cs, oy+r*cs, cs, cs); c.strokeStyle='rgba(0,0,0,.4)'; c.strokeRect(ox+cc*cs+.5, oy+r*cs+.5, cs-1, cs-1); }
+}
+function buildPaletteGrid(){
+  const grid=$('paletteGrid'); grid.innerHTML='';
+  for (const shp of SHAPES){
+    const cell=document.createElement('div'); cell.className='palette-cell'+(PALETTE[shp.id]?' active':'');
+    const cv=document.createElement('canvas'); cv.width=40; cv.height=40; drawShapeMini(cv, shp, 9); cell.appendChild(cv);
+    const nm=document.createElement('div'); nm.className='nm'; nm.textContent=shp.name; cell.appendChild(nm);
+    const badge=document.createElement('div'); badge.className='badge'; badge.textContent=PALETTE[shp.id]?('×'+PALETTE[shp.id]):''; cell.appendChild(badge);
+    cell.onclick=()=>incPalette(shp.id);
+    cell.oncontextmenu=(e)=>{ e.preventDefault(); clearPalette(shp.id); };
+    grid.appendChild(cell);
+  }
+}
+// 左键循环 1→2→3→4→清除（与 incPalette 一致）
+function incPalette(id){ const c=PALETTE[id]||0; const v=c+1; if(v>4) delete PALETTE[id]; else PALETTE[id]=v; buildPaletteGrid(); refreshPoolState(); }
+function clearPalette(id){ delete PALETTE[id]; buildPaletteGrid(); refreshPoolState(); }
+function refreshPoolState(){
+  const on=$('usePalette').checked;
+  $('vanity').disabled=!on;
+  $('vanityWrap').style.opacity=on?1:.4;
+  const grid=$('paletteGrid'); grid.style.opacity=on?1:.4; grid.style.pointerEvents=on?'auto':'none';
+  if(!on){ $('vanity').checked=false; VANITY=false; }
+  $('poolHint').textContent = !on
+    ? '未开启「限定可选形状池」：剩余空格使用全部形状填充（旧逻辑），此池不起作用。'
+    : (VANITY ? '虚荣模式已开启：套装形状仅作为可选池（非必填），连同你手动选择的形状一起精准占满棋盘。' : '左键循环设置数量（1→2→3→4→清除），右键直接清除。套装形状已自动预填。');
+}
+// 选/换必填套装：自动把套装形状预填进可选池（与 applySetToRequired 一致）
+function onSetChange(){
+  const setVal=$('set').value;
+  PALETTE={};
+  if (setVal){ const s=SETS.find(x=>x.name===setVal); if(s) s.slots.forEach(id=>{ if(id) PALETTE[id]=(PALETTE[id]||0)+1; }); }
+  buildPaletteGrid(); refreshPoolState();
+  $('genhint').textContent = setVal ? `套装已选=${setVal}，点击「生成并分析」运行。` : `场景=${$('preset').value}，必填=无（请先选套装）`;
 }
 
 // ===================== 控制 =====================
@@ -448,7 +588,7 @@ function generate(){
   }
   const required={};
   if (setVal){ const s=SETS.find(x=>x.name===setVal); if(s) s.slots.forEach(id=>required[id]=(required[id]||0)+1); }
-  const cfg = { rows:base.rows, cols:base.cols, available:base.available, required, usePalette:$('usePalette').checked, eventCap:6000 };
+  const cfg = { rows:base.rows, cols:base.cols, available:base.available, required, usePalette:$('usePalette').checked, vanity:VANITY, palette:PALETTE, eventCap:6000 };
   META = buildEvents(cfg);
   META.solutionsRaw=META.solutions;
   // 逐事件累计统计，让面板随播放递增（dedup 为最终汇总值）
@@ -468,7 +608,8 @@ function generate(){
   EVENTS=META.events; IDX=0;
   $('log').innerHTML='';
   const capNote = EVENTS.length>cfg.eventCap?'（事件已截断，真实求解不截断）':'';
-  $('genhint').textContent=`场景=${preset}，必填=${setVal||'无'}，事件=${EVENTS.length}${capNote}`;
+  const poolNote = (cfg.usePalette && META.solutions.length===0) ? ' · 当前约束（必填套装 + 可选池）下未找到精准占满方案，可尝试调整必填套装 / 往池中添加更多形状 / 关闭「限定可选池」' : '';
+  $('genhint').textContent=`场景=${preset}，必填=${setVal||'无'}，事件=${EVENTS.length}${capNote}${poolNote}`;
   renderGallery();
   renderAt(0);
   stopPlay();
@@ -502,10 +643,14 @@ function previewContainer(){
   const setSel=$('set'); SETS.forEach(s=>{ const o=document.createElement('option'); o.value=s.name; o.textContent=s.name; setSel.appendChild(o); });
   $('gen').onclick=generate;
   $('preset').onchange=previewContainer;
+  $('set').onchange=onSetChange;
+  $('usePalette').onchange=()=>refreshPoolState();
+  $('vanity').onchange=(e)=>{ VANITY=e.target.checked; refreshPoolState(); };
   $('play').onclick=play; $('pause').onclick=stopPlay; $('step').onclick=step; $('reset').onclick=reset;
   $('nextSol').onclick=skipToNextSolution; $('toEnd').onclick=toEnd;
   $('sortSel').onchange=renderGallery;
   $('speed').oninput=()=>{};
+  buildPaletteGrid(); refreshPoolState();
   generate();
 })();
 </script>
