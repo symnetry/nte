@@ -432,6 +432,20 @@ function generate(){
   const preset=$('preset').value;
   const base = CHARACTERS[preset];
   const setVal=$('set').value;
+  // 合格方案须同时满足「场景容器」+「必填套装」；未选套装时只渲染容器，不展示方案
+  if (!setVal){
+    previewContainer();
+    ['s_states','s_sol','s_dead','s_mand','s_memo','s_back','s_dedup','s_ev'].forEach(id=>$(id).textContent='0');
+    $('solCount').textContent='0';
+    $('gallery').innerHTML='<div class="hint" style="padding:8px 2px">未选择必填套装 —— 合格方案需同时满足「场景容器」与「必填套装」约束。请先选择「必填套装」。</div>';
+    $('action').innerHTML='<span class="tag enter">提示</span>请选择必填套装后点击「生成并分析」：合格方案需「场景容器 + 必填套装」同时被满足。';
+    $('genhint').textContent=`场景=${preset}，必填=无（请先选套装）`;
+    $('prog').textContent='事件 — / —';
+    $('anchorInfo').textContent='—'; $('cands').innerHTML='';
+    EVENTS=[]; IDX=0;
+    stopPlay();
+    return;
+  }
   const required={};
   if (setVal){ const s=SETS.find(x=>x.name===setVal); if(s) s.slots.forEach(id=>required[id]=(required[id]||0)+1); }
   const cfg = { rows:base.rows, cols:base.cols, available:base.available, required, usePalette:$('usePalette').checked, eventCap:6000 };
