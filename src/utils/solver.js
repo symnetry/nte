@@ -116,6 +116,7 @@ function exactSolve(rows, cols, available, required, palette = {}, { basedOnSet,
       if (ok) totalAvail++
     }
   }
+  //totalAvail 算可用格数 在这个项目中基本上可以认为恒等于20
 
   const shapeIndexById = new Map(SHAPES.map((s, i) => [s.id, i]))
 
